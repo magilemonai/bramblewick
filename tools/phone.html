@@ -1,0 +1,14 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Bramblewick phone frame</title>
+<style>
+  body { margin: 0; background: #222; display: flex; gap: 24px; justify-content: center; align-items: flex-start; padding: 12px; }
+  iframe { transform: scale(.8); transform-origin: top center; border: 0; border-radius: 18px; box-shadow: 0 0 0 6px #111; background: #000; }
+</style>
+<!-- Phone-size preview for testing. ?w=390&h=844 -->
+<iframe id="f" src="../index.html"></iframe>
+<script>
+  const p = new URLSearchParams(location.search);
+  const f = document.getElementById('f');
+  f.width = p.get('w') || 390; f.height = p.get('h') || 844;
+</script>

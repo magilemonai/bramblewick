@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bramblewick Audio Bench</title>
+<style>
+  :root { --bg: #f4ead5; --ink: #3b2a1a; --card: #fff8e8; --line: #c9b48a; --on: #6a8f3a; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #22190f; --ink: #f1e3c4; --card: #2e2317; --line: #5a4630; --on: #9cc25e; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 16px; background: var(--bg); color: var(--ink); font: 15px/1.4 system-ui, sans-serif; }
+  h1 { font-size: 20px; margin: 0 0 8px; }
+  h2 { font-size: 15px; margin: 18px 0 6px; }
+  .grid { display: flex; flex-wrap: wrap; gap: 6px; }
+  button { font: inherit; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--ink); cursor: pointer; }
+  button.on { background: var(--on); color: #fff; border-color: var(--on); }
+  label { display: flex; gap: 8px; align-items: center; margin: 4px 0; }
+  input[type=range] { flex: 1; max-width: 260px; }
+  #meter { font-family: ui-monospace, monospace; font-size: 13px; white-space: pre; background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 8px; overflow-x: auto; }
+</style>
+</head>
+<body>
+<h1>Bramblewick audio bench</h1>
+<p>Tap anything to unlock audio.</p>
+<h2>Music</h2>
+<div class="grid" id="tracks"></div>
+<h2>SFX</h2>
+<div class="grid" id="sfx"></div>
+<h2>Mix</h2>
+<label>Music <input type="range" id="mv" min="0" max="1" step="0.01"></label>
+<label>SFX <input type="range" id="sv" min="0" max="1" step="0.01"></label>
+<label>Pitch <input type="range" id="pitch" min="-12" max="12" step="1" value="0"> <span id="pv">0</span></label>
+<div class="grid"><button id="mute">Mute</button><button id="rep">Repeat last SFX x8</button></div>
+<h2>Meter</h2>
+<div id="meter">-</div>
+<script type="module">
+import { audio } from '../src/audio.js';
+window.audio = audio;
+const TRACKS = ['title','spring','summer','fall','winter','boss','elite','hearth','market','event','victory','defeat'];
+const SFX = ['click','hover','card_draw','card_play','shuffle','hit','hit_heavy','bark','plant','grow','bloom','heal','coin','buy','enemy_hurt','mend','player_hurt','debuff','buff','end_turn','turn_start','gloom','rain','page_turn','upgrade','victory','defeat','error','step','open'];
+const $ = id => document.getElementById(id);
+let lastSfx = 'click';
+const mk = (parent, label, fn) => { const b = document.createElement('button'); b.textContent = label; b.onclick = () => { audio.unlock(); fn(b); }; parent.appendChild(b); return b; };
+const tb = {};
+for (const t of TRACKS) tb[t] = mk($('tracks'), t, () => { audio.music(t); paint(); });
+mk($('tracks'), 'stop', () => { audio.music(null); paint(); });
+for (const s of SFX) mk($('sfx'), s, () => { lastSfx = s; audio.sfx(s, { pitch: +$('pitch').value }); });
+function paint() { for (const t of TRACKS) tb[t].classList.toggle('on', audio.track === t); $('mute').classList.toggle('on', audio.muted); }
+$('mv').value = audio.musicVolume; $('sv').value = audio.sfxVolume;
+$('mv').oninput = e => audio.setMusicVolume(+e.target.value);
+$('sv').oninput = e => audio.setSfxVolume(+e.target.value);
+$('pitch').oninput = e => { $('pv').textContent = e.target.value; };
+$('mute').onclick = () => { audio.unlock(); audio.toggleMute(); paint(); };
+$('rep').onclick = () => { audio.unlock(); for (let i = 0; i < 8; i++) setTimeout(() => audio.sfx(lastSfx, { pitch: +$('pitch').value }), i * 140); };
+paint();
+
+// Level meter tapped after the compressor (before the mute gain), so it reads while muted.
+let an = null, buf, peakHold = 0, rmsAvg = 0;
+window.levels = { peak: 0, rms: 0, reduction: 0 };
+function meter() {
+  const d = audio._debug();
+  if (d.ctx && !an) { an = d.ctx.createAnalyser(); an.fftSize = 2048; d.tap.connect(an); buf = new Float32Array(an.fftSize); }
+  if (an) {
+    an.getFloatTimeDomainData(buf);
+    let pk = 0, ss = 0;
+    for (const x of buf) { pk = Math.max(pk, Math.abs(x)); ss += x * x; }
+    const rms = Math.sqrt(ss / buf.length);
+    peakHold = Math.max(pk, peakHold * 0.995); rmsAvg = rmsAvg * 0.95 + rms * 0.05;
+    window.levels = { peak: peakHold, rms: rmsAvg, reduction: d.tap.reduction };
+    const db = x => (20 * Math.log10(Math.max(x, 1e-6))).toFixed(1);
+    $('meter').textContent = `state ${d.ctx.state}  t=${d.ctx.currentTime.toFixed(1)}\nplaying ${d.playing.join(', ') || '-'}\npeak ${db(peakHold)} dBFS  rms ${db(rmsAvg)} dBFS  comp ${d.tap.reduction.toFixed(1)} dB\nvoices tracked ${d.voices}`;
+  }
+  requestAnimationFrame(meter);
+}
+meter();
+</script>
+</body>
+</html>

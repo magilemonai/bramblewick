@@ -1,0 +1,9 @@
+{
+  "name": "bramblewick",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "python3 tools/serve.py 5173",
+    "sheet": "node tools/sprite-sheet.mjs"
+  }
+}

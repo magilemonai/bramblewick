@@ -1,0 +1,74 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Scenery test</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #000; font: 12px/1.2 monospace; }
+  #bg { position: fixed; left: 0; top: 0; z-index: 0; }
+  #app { position: fixed; inset: 0; z-index: 1; }
+  #panel { position: absolute; left: 6px; top: 6px; right: 6px; display: flex; flex-wrap: wrap; gap: 3px; opacity: .85; }
+  #panel.hide { display: none; }
+  button { font: inherit; padding: 3px 6px; border: 1px solid #2a1d1a; background: #f3e2b3; border-radius: 3px; cursor: pointer; }
+  button.on { background: #6fae4a; color: #fff; }
+  #fps { position: absolute; right: 6px; bottom: 6px; color: #fff; background: #0008; padding: 2px 5px; }
+  #zone { position: absolute; inset: 0; }
+  #toggle { position: absolute; right: 6px; bottom: 30px; }
+</style>
+</head>
+<body>
+<canvas id="bg"></canvas>
+<div id="app">
+  <div id="zone"></div>
+  <div id="panel"></div>
+  <button id="toggle">ui</button>
+  <div id="fps"></div>
+</div>
+<script>
+// ?frame=390x844 embeds the harness in a phone-sized iframe (window resizing is not always possible)
+{ const f = new URLSearchParams(location.search).get('frame');
+  if (f) { const [w, h] = f.split('x').map(Number); const p = new URLSearchParams(location.search); p.delete('frame');
+    document.write(`<iframe id="phone" src="?${p}" style="position:fixed;left:0;top:0;width:${w}px;height:${h}px;border:0;transform-origin:0 0;transform:scale(${Math.min(1, innerHeight / h)});z-index:9;background:#000"></iframe><style>#app,#bg{display:none}</style>`);
+    window.STOP = true; } }
+</script>
+<script type="module">
+if (window.STOP) throw new Error('framed');
+import { Scenery } from '../src/art/scenery.js';
+const sc = new Scenery(document.getElementById('bg'));
+const q = new URLSearchParams(location.search);
+const state = { kind: q.get('kind') || 'combat', season: q.get('season') || 'spring', weather: q.get('weather') || null, dusk: q.get('dusk') === '1' };
+let burstType = 'hit';
+sc.setScene(state); sc.start();
+window.sc = sc; window.state = state;
+if (q.get('ui') === '0') document.getElementById('panel').classList.add('hide');
+const panel = document.getElementById('panel');
+function group(name, opts, get, set) {
+  for (const o of opts) {
+    const b = document.createElement('button');
+    b.textContent = o === null ? 'none' : String(o);
+    b.onclick = () => { set(o); render(); };
+    b.dataset.g = name; b.dataset.v = String(o);
+    panel.appendChild(b);
+  }
+}
+group('kind', ['title', 'map', 'combat', 'hearth', 'market', 'event', 'victory', 'defeat'], () => state.kind, v => { state.kind = v; sc.setScene(state); });
+group('season', ['spring', 'summer', 'fall', 'winter'], () => state.season, v => { state.season = v; sc.setScene(state); });
+group('weather', [null, 'sun', 'rain', 'drought', 'wind', 'frost', 'fog'], () => state.weather, v => { state.weather = v; sc.setWeather(v); });
+group('dusk', [true, false], () => state.dusk, v => { state.dusk = v; sc.setScene(state); });
+group('burst', ['hit', 'leaf', 'bloom', 'heal', 'bark', 'gold', 'gloom', 'sparkle', 'mend'], () => burstType, v => { burstType = v; });
+const sb = document.createElement('button'); sb.textContent = 'SHAKE'; sb.onclick = () => sc.shake(8); panel.appendChild(sb);
+function render() {
+  for (const b of panel.querySelectorAll('button[data-g]')) {
+    const cur = { kind: state.kind, season: state.season, weather: String(state.weather), dusk: String(state.dusk), burst: burstType }[b.dataset.g];
+    b.classList.toggle('on', String(cur) === b.dataset.v);
+  }
+}
+render();
+document.getElementById('zone').addEventListener('pointerdown', e => sc.burst(e.clientX, e.clientY, burstType));
+document.getElementById('toggle').onclick = () => panel.classList.toggle('hide');
+let frames = 0, last = performance.now();
+(function tick(now) { frames++; if (now - last > 1000) { document.getElementById('fps').textContent = `${frames} fps  ${sc.W}x${sc.H} @${sc.px.toFixed(2)}`; frames = 0; last = now; } requestAnimationFrame(tick); })(last);
+</script>
+</body>
+</html>
