@@ -6,4 +6,4 @@
     Bot win rate ~20% vs 45-70% for the others; drought shuts off the garden.
 - [ ] Add a plot-protection card that blocks one trample per fight
     Needs a `trampled` hook in the engine; the Scarecrow archetype's signature card.
-- [ ] Decide whether to git init and where the game should live online
+- [x] Decide whether to git init and where the game should live online
