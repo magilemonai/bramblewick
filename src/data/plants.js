@@ -2,6 +2,8 @@
 // growTime = growth points needed. Growth comes from weather at the start of each player turn
 // (sun 1, rain 2, wind 1, fog 1, drought 0, frost 0) plus cards. Perennials reset and stay.
 // bloom(ctx) uses the card ctx API; ctx.u is the seed card's upgrade flag.
+// 2.0: gloamweed is the one hostile plant. Critters plant it (e.plantWeed); it has no seed card,
+// it takes up a plot, and its bloom hurts the player. Uproot it (ctx.uproot('weeds')) or outgrow it.
 
 const v = (u, a, b) => (u ? b : a);
 
@@ -56,6 +58,15 @@ export const PLANTS = {
     desc: u => `Grows in 2. Blooms: apply ${v(u, 4, 6)} Wilt to all critters.`,
     bloom(ctx) { ctx.apply('all', 'wilt', v(ctx.u, 4, 6)); },
   },
+
+  // ------------------------------------------------------------------ hostile (no seed card)
+  gloamweed: {
+    name: 'Gloamweed', growTime: 3, sprite: 'plant_gloamweed', perennial: false, hostile: true, weed: true,
+    flavor: 'Grey-violet, thorny, and faintly smug about the plot it took.',
+    desc: () => 'A weed. Grows in 3. Blooms: you lose 5 Heart and a Gloom gets into your discard pile. Uproot it, or fill the plot first.',
+    bloom(ctx) { ctx.loseHp(5); ctx.addCard('gloom', 'discard'); },
+  },
 };
 
-export const PLANT_IDS = Object.keys(PLANTS);
+export const PLANT_IDS = Object.keys(PLANTS).filter(id => !PLANTS[id].hostile);
+export const WEED_ID = 'gloamweed';

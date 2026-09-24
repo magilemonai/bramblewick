@@ -1,5 +1,5 @@
 // 9-slice pixel frames for CSS border-image. Each frame is 12x12 with 4px slices.
-import { registerSprites, spriteURL, PAL } from '../pixel.js';
+import { registerSprites, spriteURL, hasSprite, PAL } from '../pixel.js';
 
 const ROWS = [
   '..oooooooo..',
@@ -59,5 +59,46 @@ export function installFrames() {
     const css = name.replace('_', '-');
     root.setProperty(`--f-${css}`, `url(${spriteURL('frame_' + name, 3)})`);
     root.setProperty(`--f2-${css}`, `url(${spriteURL('frame_' + name, 2)})`);
+  }
+}
+
+// ---------- character pose frames ----------
+// One shared timer flips every idle sprite between `<id>` and `<id>~1` (~0.6s), so a crowded fight
+// costs one interval, not one per unit. `~atk` / `~hurt` override briefly. Missing frames fall back to base.
+const anims = new Set();
+let idleTimer = 0, idleFlip = false, idlePaused = false;
+const frameURL = (id, pose) => {
+  const fid = pose ? `${id}~${pose}` : id;
+  return hasSprite(fid) ? spriteURL(fid, 1) : spriteURL(id, 1);
+};
+function tick() {
+  idleFlip = !idleFlip;
+  for (const a of anims) if (!a.pose) a.show(idleFlip && !idlePaused ? '1' : null);
+}
+export function setIdlePaused(v) { idlePaused = !!v; }
+
+export class SpriteAnim {
+  constructor(imgEl, id) {
+    this.img = imgEl; this.id = id; this.pose = null; this.cur = null; this.t = 0;
+    anims.add(this);
+    if (!idleTimer) idleTimer = setInterval(tick, 600);
+  }
+  show(frame) {
+    if (frame === this.cur) return;
+    this.cur = frame;
+    this.img.src = frameURL(this.id, frame);
+  }
+  // pose: 'atk' | 'hurt'; ms: how long to hold it
+  setPose(pose, ms = 350) {
+    if (!hasSprite(`${this.id}~${pose}`)) return;
+    clearTimeout(this.t);
+    this.pose = pose;
+    this.show(pose);
+    this.t = setTimeout(() => { this.pose = null; this.show(null); }, ms);
+  }
+  destroy() {
+    clearTimeout(this.t);
+    anims.delete(this);
+    if (!anims.size && idleTimer) { clearInterval(idleTimer); idleTimer = 0; }
   }
 }

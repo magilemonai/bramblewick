@@ -409,4 +409,60 @@ for (const id of Object.keys(SEEDS)) {
   defs[`plant_${id}_2`] = S[id + '2']();
   defs[`plant_${id}_3`] = S[id + '3']();
 }
+// ---- gloamweed (2.0): planted by critters into your plots. Hostile, thorny, a little sly.
+// Extra palette keys on top of P: grey-violet ramp, lilac glow, pale thorn tips.
+const GP = { ...P, 0: '#2f2a3d', W: '#3a3448', P: '#5b5470', '#': '#7a7194', '*': '#9e8fd1', '+': '#d8ccff', '=': '#f6f0ff', '^': '#e8dcc8', '~': '#a59dbc' };
+const GWEED = ['~', '#', 'P'];
+const gdone = c => { c.outline(); return { palette: GP, rows: c.rows() }; };
+const gthorns = (c, pts) => { for (const [x, y] of pts) c.set(x, y, '^'); };
+const gloamweed = [
+  () => { // stage 0: a lumpy grey seed pod shoving up out of the soil, one glint
+    const c = mk();
+    c.ball(8, 16.5, 5.5, 4.2, ['e', 'd', 'D'], { clip: (x, y) => y <= 15 });
+    c.ball(8, 11.6, 2, 1.6, ['~', '#', 'P'], { ang: 0.3 });
+    c.pts('^', [7, 10]); c.pts('*', [9, 12]);
+    c.pts('D', [5, 13], [11, 13], [6, 14]); c.pts('E', [10, 15], [4, 15]);
+    return gdone(c);
+  },
+  () => { // stage 1: a crooked sprout with thorn tips
+    const c = mk();
+    c.path('#', [[8, 15], [8, 12], [7, 10], [8, 8]]);
+    c.path('P', [[9, 15], [9, 12]]);
+    c.leaf(5, 9.5, 2.4, Math.PI + 0.5, GWEED, 0.5); c.leaf(11, 8.5, 2.4, -0.5, GWEED, 0.5);
+    gthorns(c, [[7, 12], [9, 11], [2, 8], [13, 6], [8, 7]]);
+    c.pts('*', [8, 8]);
+    return gdone(c);
+  },
+  () => { // stage 2: thorny stalks curling in, a closed bud with a glowing slit
+    const c = mk();
+    c.path('#', [[8, 15], [7, 12], [8, 9], [8, 6]]); c.path('P', [[9, 15], [8, 12]]);
+    c.path('P', [[7, 12], [4, 11], [3, 8], [4, 7]]); c.path('P', [[8, 10], [12, 10], [13, 7]]);
+    c.leaf(4, 13.5, 1.8, Math.PI - 0.2, GWEED); c.leaf(12, 13, 1.8, 0.2, GWEED);
+    gthorns(c, [[6, 13], [9, 11], [2, 9], [5, 10], [11, 9], [14, 8], [3, 6], [13, 6]]);
+    c.ball(8, 4.3, 2.4, 2.8, ['~', '#', 'P', 'W']);
+    c.pts('*', [7, 4], [8, 4], [9, 4]); c.pts('+', [8, 4]);
+    return gdone(c);
+  },
+  () => { // stage 3: full-grown gloamweed, a thorny pod with a sly half-lidded grin
+    const c = mk();
+    c.path('#', [[8, 15], [8, 11]]); c.path('P', [[7, 15], [7, 12]]);
+    c.leaf(3.2, 12.5, 2.8, Math.PI - 0.35, GWEED); c.leaf(12.8, 12.5, 2.8, 0.35, GWEED);
+    c.leaf(2.6, 7, 2.2, Math.PI + 0.7, GWEED); c.leaf(13.4, 6.5, 2.2, -0.7, GWEED);
+    gthorns(c, [[1, 11], [14, 11], [1, 5], [14, 4], [5, 14], [10, 14], [0, 13], [15, 13]]);
+    c.ball(8, 6.8, 4.6, 4.4, ['~', '#', 'P', 'W']);
+    // crown of thorns on the pod
+    c.pts('^', [5, 2], [8, 1], [11, 2]); c.pts('P', [5, 3], [8, 2], [11, 3]);
+    // sly face: heavy lids, glowing slits, a smug one-sided smile
+    c.pts('k', [4, 5], [5, 5], [6, 5], [7, 5], [9, 5], [10, 4], [11, 4], [12, 5]);
+    c.pts('*', [5, 6], [6, 6], [10, 6], [11, 6], [10, 5], [11, 5]); c.pts('=', [6, 6], [11, 5]);
+    c.pts('k', [5, 8], [6, 9], [7, 9], [8, 9], [9, 9], [10, 9], [11, 8]); c.pts('^', [7, 10]); c.pts('0', [8, 10], [9, 10]);
+    c.pts('#', [4, 4], [5, 4]);
+    // gloam drip + spores
+    c.pts('P', [4, 10]); c.pts('W', [4, 11]);
+    c.outline();
+    c.pts('*', [1, 1], [14, 0]); c.pts('+', [15, 9]);
+    return { palette: GP, rows: c.rows() };
+  },
+];
+gloamweed.forEach((fn, i) => { defs[`plant_gloamweed_${i}`] = fn(); });
 registerSprites(defs);

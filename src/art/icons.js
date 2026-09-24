@@ -792,24 +792,22 @@ const coin = canvas(14, 14).each((x, y) => {
   '..YY..',
 ]).rows();
 
-// Warm sun orb with a sprout emblem inside, so it reads as energy (not fruit, not a coin).
+// Leaf-sun: a gold core ringed by green leaves (long diagonals) and short gold rays (cardinal).
+// Silhouette and colour both differ from the round gold ui_coin.
 const stamina = canvas(14, 14).each((x, y) => {
-  const dx = x - 6.5, dy = y - 6.5, r = Math.hypot(dx, dy), l = lit(dx, dy);
-  if (r > 6.8) return null;
-  const d = Math.hypot(x - 4.6, y - 4.4);
-  if (d < 1.0) return 'a';
-  if (d < 2.3) return 'U';
-  if (r > 5.6) return l > 0.2 ? 'u' : l > -0.5 ? 'y' : 'o';
-  if (r > 4.6 && l < -0.2) return 'y';
-  return 'u';
-}).stamp(4, 5, [
-  '.....hG',
-  '.hG.hGg',
-  'hGGghg.',
-  '.gg.g..',
-  '....g..',
-  '...gg..',
-]).rows();
+  const dx = x + 0.5 - 7, dy = y + 0.5 - 7, r = Math.hypot(dx, dy), a = Math.atan2(dy, dx), l = lit(dx, dy);
+  if (r < 3.3) return r < 1.6 && l > 0.2 ? 'U' : l > 0.35 ? 'u' : l > -0.45 ? 'y' : 'Y';
+  const k = Math.round(a / (Math.PI / 4)), da = Math.abs(a - k * Math.PI / 4) * r;
+  const leaf = k % 2 !== 0;
+  const len = leaf ? 9.4 : 6.9, t = Math.max(0, (r - 2.6) / (len - 2.6));
+  if (t > 1) return null;
+  const w = leaf ? 2.1 * Math.sin(Math.PI * Math.pow(t, 0.75)) + 0.15 : 1.3 * (1 - t) + 0.1;
+  if (da > w) return null;
+  if (!leaf) return l > 0 ? 'u' : 'y';
+  const side = Math.sign(a - k * Math.PI / 4) * (k === 1 || k === -3 ? 1 : -1);
+  if (da < 0.45 && t > 0.2 && t < 0.8) return 'G';
+  return side > 0 ? (l > -0.2 ? 'h' : 'G') : (l > 0.3 ? 'G' : 'g');
+}).rows();
 
 const gear = canvas(14, 14).each((x, y) => {
   const dx = x - 6.5, dy = y - 6.5, r = Math.hypot(dx, dy), a = Math.atan2(dy, dx), l = lit(dx, dy);
@@ -918,28 +916,33 @@ add({
   ]),
 });
 
+// Clenched fist, knuckles to the viewer, thumb across the front, red cuff. Reads as "hit harder".
+const FIST = canvas(14, 14).each((x, y) => {
+  const px = x + 0.5, py = y + 0.5;
+  const sh = (cx, cy, rx, ry) => {
+    const dx = (px - cx) / rx, dy = (py - cy) / ry;
+    if (dx * dx + dy * dy > 1) return null;
+    const l = -(dx + dy) * 0.75;
+    return l > 0.3 ? '1' : l > -0.4 ? '2' : '3';
+  };
+  if (y >= 11 && x >= 3 && x <= 10) return y === 11 ? 'r' : 'R';
+  const t = sh(6.4, 8.9, 4.7, 1.9); if (t) return t;
+  for (const cx of [3.3, 5.9, 8.5, 11.1]) { const f = sh(cx, 4.6, 1.5, 2.7); if (f) return f; }
+  return sh(7.2, 7.6, 5.8, 4.2);
+}).stamp(0, 2, [
+  '....4.4.4.....',
+  '....4.4.4.....',
+  '....4.4.4.....',
+  '..............',
+  '...4444444....',
+]).stamp(10, 8, ['4', '4']).stamp(2, 5, ['.', '.', '.', '.']).rows();
+
 // =============================================================================================
 // STATUS (st_*)
 // =============================================================================================
 add({
   st_bark: BARK_SHIELD,
-  st_grit: {
-    pal: { 1: '#f7d3b0', 2: PAL.skin, 3: PAL.skinShade, 4: '#b0765a' },
-    rows: [
-      '..11222.......',
-      '.1122223......',
-      '.1242423......',
-      '..222233......',
-      '..rrrrR.......',
-      '..12223.......',
-      '..12233...12..',
-      '..122333.12223',
-      '..12222312222334',
-      '..122222222233',
-      '...1222222233.',
-      '....44333334..',
-    ].map(r => r.slice(0, 14)),
-  },
+  st_grit: { pal: { 1: '#f7d3b0', 2: PAL.skin, 3: PAL.skinShade, 4: '#b0765a' }, rows: FIST },
   st_sturdy: [
     '.....nnNn.....',
     '....nNnnMm....',

@@ -1,7 +1,7 @@
 // Card rendering + keyword glossary.
 import { CARDS } from '../data/cards.js';
 import { PLANTS } from '../data/plants.js';
-import { h, img } from './dom.js';
+import { h, img, hideTip } from './dom.js';
 import { cardKeywords, baseCost } from '../engine/combat.js';
 
 export const GLOSSARY = {
@@ -25,6 +25,12 @@ export const GLOSSARY = {
   Grow: 'Add growth to plants.',
   Stamina: 'Spend it to play cards. Refills to 3 each turn.',
   Gloam: 'Clogs your deck. Grey, sticky, a little sad.',
+  Guard: 'A scarecrow on a plot. A trample knocks down one Guard instead of the plant.',
+  Gloamweed: 'A weed critters plant in your plots. It grows like a plant, and when it blooms it hurts you.',
+  Uproot: 'Pull a plant out of its plot. It does not bloom.',
+  Bees: 'At the end of your turn, each Bee stings a random critter for 1. Stings ignore Bark.',
+  Sting: 'A Bee sting: 1 damage to a random critter, ignoring Bark.',
+  Lock: 'Locked weather stays put: the next weather roll is skipped.',
 };
 const KW_RE = new RegExp(`\\b(${Object.keys(GLOSSARY).join('|')})(s|ed|ing)?\\b`, 'g');
 const TYPE_LABEL = { tool: 'Tool', tend: 'Tend', seed: 'Seed', charm: 'Charm', gloom: 'Gloam' };
@@ -46,7 +52,7 @@ export function descHTML(inst) {
 export function glossaryFor(inst) {
   const text = descText(inst) + ' ' + cardKeywords(inst).join(' ');
   const found = new Set();
-  for (const k of Object.keys(GLOSSARY)) if (new RegExp(`\\b${k}`, 'i').test(text)) found.add(k);
+  for (const k of Object.keys(GLOSSARY)) if (new RegExp(`\\b${k}(s|es|ed|ing|th)?\\b`, 'i').test(text)) found.add(k);
   return [...found];
 }
 
@@ -92,4 +98,58 @@ export function plantTip(p) {
   box.append(h('div', `Growth ${p.growth}/${p.growTime}${def?.perennial ? ' · Perennial' : ''}`));
   try { box.append(h('div', { style: { marginTop: '3px' } }, def.desc(!!p.u))); } catch { /* */ }
   return box;
+}
+
+// Which plant a seed card grows (explicit `plant` field, else a plant name in its text).
+function plantFor(inst) {
+  const d = CARDS[inst.id];
+  if (!d || d.type !== 'seed') return null;
+  if (d.plant && PLANTS[d.plant]) return d.plant;
+  const text = descText(inst).toLowerCase();
+  return Object.keys(PLANTS).find(id => text.includes((PLANTS[id].name || id).toLowerCase())) || null;
+}
+
+// Full-screen inspect: the card large, its upgraded version beside it, glossary, flavor, plant.
+// Tap anywhere or press Esc to close. Returns the modal element (already appended).
+export function inspectCard(inst, { cost, onClose } = {}) {
+  hideTip();
+  document.querySelector('.modal.inspect')?.remove();
+  const d = CARDS[inst.id];
+  const pair = h('div.inspect-pair', h('div.inspect-col', renderCard(inst, { cost, className: 'huge' }), inst.u ? h('small', 'Upgraded') : null));
+  if (!inst.u && d && d.type !== 'gloom') {
+    pair.append(h('div.inspect-arrow', '▸'), h('div.inspect-col', renderCard({ ...inst, u: true }, { className: 'huge' }), h('small', 'Upgraded')));
+  }
+  const info = h('div.inspect-info.chip');
+  if (d?.flavor) info.append(h('div.flavor', d.flavor));
+  const pid = plantFor(inst);
+  if (pid) {
+    const pd = PLANTS[pid];
+    let t = '';
+    try { t = pd.desc(!!inst.u); } catch { /* */ }
+    info.append(h('div.gl', img(`plant_${pid}_3`, 2), h('span', h('b', pd.name + ': '), /grow/i.test(t) ? t : `Grows in ${pd.growTime}. ${t}`)));
+  }
+  for (const k of glossaryFor(inst)) info.append(h('div.gl', h('span', h('b', k + ': '), GLOSSARY[k])));
+  const close = () => { m.remove(); removeEventListener('keydown', onKey, true); onClose?.(); };
+  const onKey = e => { if (e.key === 'Escape' || e.key === ' ' || e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); close(); } };
+  const m = h('div.modal.inspect', { onclick: close, oncontextmenu: e => { e.preventDefault(); close(); } },
+    pair, info.childNodes.length ? info : null, h('div.inspect-hint', 'Tap anywhere to close'));
+  addEventListener('keydown', onKey, true);
+  (document.getElementById('overlay') || document.body).append(m);
+  return m;
+}
+
+// Long-press (touch) or right-click (desktop) opens inspect. Sets el._lpFired so a click handler
+// can ignore the release that ends a long-press. Use for cards outside the hand (grids, piles).
+export function attachInspect(el, getInst, opts = {}) {
+  let t = 0, sx = 0, sy = 0;
+  const open = () => { el._lpFired = true; inspectCard(getInst(), opts); };
+  el.addEventListener('contextmenu', e => { e.preventDefault(); if (!document.querySelector('.modal.inspect')) open(); });
+  el.addEventListener('pointerdown', e => {
+    if (e.pointerType === 'mouse') return;
+    el._lpFired = false; sx = e.clientX; sy = e.clientY;
+    clearTimeout(t); t = setTimeout(open, 450);
+  });
+  el.addEventListener('pointermove', e => { if (Math.hypot(e.clientX - sx, e.clientY - sy) > 10) clearTimeout(t); });
+  for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) el.addEventListener(ev, () => clearTimeout(t));
+  el.addEventListener('click', e => { if (el._lpFired) { el._lpFired = false; e.stopImmediatePropagation(); e.preventDefault(); } }, true);
 }

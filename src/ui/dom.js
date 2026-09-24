@@ -77,12 +77,45 @@ export function banner(text, color) {
   document.body.append(el);
   setTimeout(() => el.remove(), 1200);
 }
-export function floatText(x, y, text, cls = '') {
+// opts.mag scales the number (big hits read bigger); opts.ms overrides lifetime.
+export function floatText(x, y, text, cls = '', opts = {}) {
   const el = h('div.float.' + (cls || 'dmg').split(' ').join('.'), text);
   el.style.left = x + 'px'; el.style.top = y + 'px';
+  if (opts.mag) el.style.setProperty('--mag', opts.mag);
   document.body.append(el);
-  setTimeout(() => el.remove(), 1050);
+  setTimeout(() => el.remove(), opts.ms || 1050);
+  return el;
 }
+
+// ---------- 2.0 settings plumbing (game.settings is an object in 2.0; a method in 1.0) ----------
+export function getSettings(game) {
+  const s = game?.settings;
+  return s && typeof s === 'object' ? s : {};
+}
+// Mirrors settings onto <html> so every screen (cards, panels, tooltips) picks them up from CSS.
+let lastApplied = '';
+export function applySettings(s = {}) {
+  const ts = +s.textScale || 1, spd = Math.max(1, +s.speed || 1);
+  const key = [ts, spd, !!s.reducedMotion, !!s.highContrast].join();
+  if (key === lastApplied) return false;
+  lastApplied = key;
+  const r = document.documentElement;
+  const tsc = 1 + (ts - 1) * 0.6;           // cards widen a little, text makes up the rest
+  r.style.setProperty('--ts', ts);
+  r.style.setProperty('--tsc', tsc);
+  r.style.setProperty('--tsd', (ts / tsc).toFixed(3));
+  r.style.setProperty('--spd', spd);
+  r.classList.toggle('rm', !!s.reducedMotion);
+  r.classList.toggle('hc', !!s.highContrast);
+  r.classList.toggle('fast', spd > 1);
+  return true;
+}
+export function buzz(game, pattern) {
+  if (!getSettings(game).haptics || !navigator.vibrate) return;
+  try { navigator.vibrate(pattern); } catch { /* unsupported */ }
+}
+export const isLandscapePhone = () => innerHeight <= 500 && innerWidth > innerHeight;
+export const isDesktop = () => innerWidth >= 820 && !isLandscapePhone();
 export function centerOf(el) {
   const r = el.getBoundingClientRect();
   return { x: r.left + r.width / 2, y: r.top + r.height / 2, r };

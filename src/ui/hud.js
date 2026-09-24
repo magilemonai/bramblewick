@@ -2,7 +2,7 @@
 import { KEEPSAKES } from '../data/keepsakes.js';
 import { PRESERVES } from '../data/preserves.js';
 import { SEASONS } from '../data/story.js';
-import { h, img, setTip } from './dom.js';
+import { h, img, setTip, applySettings, getSettings } from './dom.js';
 import { season } from '../engine/state.js';
 
 export class Hud {
@@ -17,9 +17,12 @@ export class Hud {
     this.jarsEl = h('div.jars');
     this.keepsEl = h('div.keeps');
     this.seasonEl = h('div.season-chip.chip');
-    this.deckBtn = h('button.icon-btn', { onclick: () => game.showPile('Your deck', game.run.deck, false) }, img('ui_deck', 2), h('span.stat', ''));
+    this.deckBtn = h('button.icon-btn', { onclick: () => game.showPile('Your deck', game.run.deck, false) }, img('ui_deck', 2), h('span.deck-n', ''));
     setTip(this.deckBtn, '<b>Deck</b>Every card you carry.');
-    this.gearBtn = h('button.icon-btn', { onclick: () => game.settings() }, img('ui_gear', 2));
+    this.gearBtn = h('button.icon-btn.gear', { 'aria-label': 'Settings', onclick: () => {
+      if (typeof game.settingsModal === 'function') game.settingsModal();
+      else if (typeof game.settings === 'function') game.settings(); // 1.0 fallback
+    } }, img('ui_gear', 2));
     this.el = h('div.hud', this.hpEl, this.coinEl, this.jarsEl, h('div.spacer'), this.seasonEl, this.deckBtn, this.gearBtn, this.keepsEl);
     this.update();
   }
@@ -32,7 +35,8 @@ export class Hud {
     const s = season(run);
     this.seasonEl.textContent = SEASONS[s]?.title || s;
     this.deckBtn.lastChild.textContent = run.deck.length;
-    this.deckBtn.lastChild.style.cssText = 'color:#fff4d6;text-shadow:0 2px 0 #2a1d1a;font-size:14px';
+    this.hpEl.classList.toggle('low', src.hp > 0 && src.hp / src.maxHp <= 0.3);
+    applySettings(getSettings(this.game));
     const jarsKey = run.preserves.join(',');
     if (this.jarsEl.dataset.k !== jarsKey) {
       this.jarsEl.dataset.k = jarsKey;

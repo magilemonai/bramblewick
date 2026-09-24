@@ -8,13 +8,15 @@
   html, body { margin: 0; height: 100%; overflow: hidden; background: #000; font: 12px/1.2 monospace; }
   #bg { position: fixed; left: 0; top: 0; z-index: 0; }
   #app { position: fixed; inset: 0; z-index: 1; }
-  #panel { position: absolute; left: 6px; top: 6px; right: 6px; display: flex; flex-wrap: wrap; gap: 3px; opacity: .85; }
+  #panel { position: absolute; left: 6px; top: 6px; right: 6px; display: flex; flex-wrap: wrap; gap: 3px; opacity: .88; max-height: 70vh; overflow: auto; }
   #panel.hide { display: none; }
+  #panel b { color: #fff; background: #0008; padding: 3px 4px; border-radius: 3px; }
   button { font: inherit; padding: 3px 6px; border: 1px solid #2a1d1a; background: #f3e2b3; border-radius: 3px; cursor: pointer; }
   button.on { background: #6fae4a; color: #fff; }
-  #fps { position: absolute; right: 6px; bottom: 6px; color: #fff; background: #0008; padding: 2px 5px; }
+  #fps { position: absolute; right: 6px; bottom: 6px; color: #fff; background: #0008; padding: 2px 5px; white-space: pre; text-align: right; }
   #zone { position: absolute; inset: 0; }
-  #toggle { position: absolute; right: 6px; bottom: 30px; }
+  #toggle { position: absolute; right: 6px; bottom: 44px; }
+  .spot { position: absolute; width: 14px; height: 14px; margin: -7px 0 0 -7px; border: 2px solid #fff; border-radius: 50%; pointer-events: none; }
 </style>
 </head>
 <body>
@@ -33,17 +35,27 @@
     window.STOP = true; } }
 </script>
 <script type="module">
+// URL params: kind season weather dusk arena quality danger ui=0 spots=1 autoburst=<type>
+//   cover=<type>&p=0..1&phase=in|out  freezes one transition frame (for screenshots)
+// window.bench(n) renders n frames synchronously and returns ms/frame (works in throttled tabs).
 if (window.STOP) throw new Error('framed');
 import { Scenery } from '../src/art/scenery.js';
 const sc = new Scenery(document.getElementById('bg'));
 const q = new URLSearchParams(location.search);
-const state = { kind: q.get('kind') || 'combat', season: q.get('season') || 'spring', weather: q.get('weather') || null, dusk: q.get('dusk') === '1' };
-let burstType = 'hit';
+const state = {
+  kind: q.get('kind') || 'combat', season: q.get('season') || 'spring', weather: q.get('weather') || null,
+  dusk: q.get('dusk') === '1', arena: q.get('arena') || null,
+};
+let burstType = q.get('autoburst') || 'hit', quality = q.get('quality') || 'high', danger = +(q.get('danger') || 0), coverType = 'page';
+sc.setQuality(quality);
 sc.setScene(state); sc.start();
+sc.setDanger(danger);
 window.sc = sc; window.state = state;
-if (q.get('ui') === '0') document.getElementById('panel').classList.add('hide');
+if (q.get('ui') === '0') { document.getElementById('panel').classList.add('hide'); document.getElementById('toggle').style.display = 'none'; }
 const panel = document.getElementById('panel');
-function group(name, opts, get, set) {
+function label(t) { const b = document.createElement('b'); b.textContent = t; panel.appendChild(b); }
+function group(name, opts, set) {
+  label(name);
   for (const o of opts) {
     const b = document.createElement('button');
     b.textContent = o === null ? 'none' : String(o);
@@ -52,23 +64,69 @@ function group(name, opts, get, set) {
     panel.appendChild(b);
   }
 }
-group('kind', ['title', 'map', 'combat', 'hearth', 'market', 'event', 'victory', 'defeat'], () => state.kind, v => { state.kind = v; sc.setScene(state); });
-group('season', ['spring', 'summer', 'fall', 'winter'], () => state.season, v => { state.season = v; sc.setScene(state); });
-group('weather', [null, 'sun', 'rain', 'drought', 'wind', 'frost', 'fog'], () => state.weather, v => { state.weather = v; sc.setWeather(v); });
-group('dusk', [true, false], () => state.dusk, v => { state.dusk = v; sc.setScene(state); });
-group('burst', ['hit', 'leaf', 'bloom', 'heal', 'bark', 'gold', 'gloom', 'sparkle', 'mend'], () => burstType, v => { burstType = v; });
-const sb = document.createElement('button'); sb.textContent = 'SHAKE'; sb.onclick = () => sc.shake(8); panel.appendChild(sb);
+function button(text, fn) { const b = document.createElement('button'); b.textContent = text; b.onclick = fn; panel.appendChild(b); }
+group('kind', ['title', 'select', 'map', 'combat', 'hearth', 'market', 'event', 'victory', 'defeat'], v => { state.kind = v; if (v !== 'combat') state.arena = null; sc.setScene(state); });
+group('arena', [null, 'rootstag', 'scorchmoth', 'hollowjack', 'nightheron'], v => { state.arena = v; if (v) state.kind = 'combat'; sc.setScene(state); });
+group('season', ['spring', 'summer', 'fall', 'winter'], v => { state.season = v; sc.setScene(state); });
+group('weather', [null, 'sun', 'rain', 'drought', 'wind', 'frost', 'fog'], v => { state.weather = v; sc.setWeather(v); });
+group('dusk', [true, false], v => { state.dusk = v; sc.setScene(state); });
+group('burst', ['hit', 'leaf', 'bloom', 'heal', 'bark', 'gold', 'gloom', 'sparkle', 'mend'], v => { burstType = v; });
+group('quality', ['high', 'low'], v => { quality = v; sc.setQuality(v); });
+group('danger', [0, 0.35, 0.7, 1], v => { danger = v; sc.setDanger(v); });
+// cover: covers, swaps the season under the cover, then uncovers
+group('cover', ['page', 'leaves', 'iris', 'snow'], async v => {
+  coverType = v;
+  const t0 = performance.now();
+  await sc.cover(v);
+  const t1 = performance.now();
+  const seasons = ['spring', 'summer', 'fall', 'winter'];
+  state.season = seasons[(seasons.indexOf(state.season) + 1) % 4]; sc.setScene(state); render();
+  await new Promise(r => setTimeout(r, 200));
+  const t2 = performance.now();
+  await sc.uncover();
+  console.log(`cover ${v}: in ${(t1 - t0) | 0}ms, out ${(performance.now() - t2) | 0}ms`);
+});
+label('fx');
+button('SHAKE', () => sc.shake(8));
+button('flash white', () => sc.flash('#fff', 120));
+button('flash red', () => sc.flash('#d6453d', 260));
+button('flash gloom', () => sc.flash('#9e8fd1', 400));
+button('burst x20', () => { for (let i = 0; i < 20; i++) sc.burst(Math.random() * innerWidth, Math.random() * innerHeight, burstType); });
 function render() {
   for (const b of panel.querySelectorAll('button[data-g]')) {
-    const cur = { kind: state.kind, season: state.season, weather: String(state.weather), dusk: String(state.dusk), burst: burstType }[b.dataset.g];
+    const cur = { kind: state.kind, arena: String(state.arena), season: state.season, weather: String(state.weather), dusk: String(state.dusk), burst: burstType, quality, danger: String(danger), cover: coverType }[b.dataset.g];
     b.classList.toggle('on', String(cur) === b.dataset.v);
   }
 }
 render();
 document.getElementById('zone').addEventListener('pointerdown', e => sc.burst(e.clientX, e.clientY, burstType));
 document.getElementById('toggle').onclick = () => panel.classList.toggle('hide');
+// select scene: show where the UI would stand the characters
+if (q.get('spots') === '1') setInterval(() => {
+  document.querySelectorAll('.spot').forEach(e => e.remove());
+  for (const s of sc.spots || []) { const d = document.createElement('div'); d.className = 'spot'; d.style.left = s.x + 'px'; d.style.top = s.y + 'px'; document.getElementById('app').appendChild(d); }
+}, 500);
+if (q.get('autoburst')) setInterval(() => sc.burst(innerWidth * 0.62, innerHeight * 0.32, burstType), 700);
+if (q.get('cover')) setTimeout(() => sc._coverFrame(q.get('cover'), +(q.get('p') ?? 0.5), q.get('phase') || 'in'), 300);
+// perf: time each real frame's render, and a synchronous bench for throttled tabs
+let rms = 0, rn = 0;
+const orig = sc._render.bind(sc);
+sc._render = dt => { const a = performance.now(); orig(dt); rms += performance.now() - a; rn++; };
+window.bench = (n = 300) => {
+  const a = performance.now();
+  for (let i = 0; i < n; i++) orig(1 / 60);
+  return (performance.now() - a) / n;
+};
+const live = pool => { let c = 0; for (let i = 0; i < pool.length; i++) if (pool[i].on) c++; return c; };
 let frames = 0, last = performance.now();
-(function tick(now) { frames++; if (now - last > 1000) { document.getElementById('fps').textContent = `${frames} fps  ${sc.W}x${sc.H} @${sc.px.toFixed(2)}`; frames = 0; last = now; } requestAnimationFrame(tick); })(last);
+(function tick(now) {
+  frames++;
+  if (now - last > 1000) {
+    document.getElementById('fps').textContent = `${frames} fps  render ${(rms / Math.max(1, rn)).toFixed(2)}ms\n${sc.W}x${sc.H} @${sc.px.toFixed(2)} z${sc.z.toFixed(2)}  amb ${live(sc.amb)} burst ${live(sc.bur)}`;
+    frames = 0; last = now; rms = 0; rn = 0;
+  }
+  requestAnimationFrame(tick);
+})(last);
 </script>
 </body>
 </html>

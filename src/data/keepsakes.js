@@ -1,8 +1,10 @@
 // Bramblewick: keepsakes (relics). Hooks use the card ctx API and receive (ctx, ...args).
 // mods are applied by the engine: maxHp, restHeal, shopDiscount (percent), extraCardChoice,
 // startStamina, drawBonus.
+// 2.0: pool: 'farmer' | 'pell' (absent = shared); unlock: { villager, tier } | { boss } (absent = always).
+// New hooks: trampled(plot), weatherChanged(w), cardExhausted(inst), stung(enemy), weedPlanted(plot).
 
-import { CARDS, SEED_CARD_IDS, plotIndexOf } from './cards.js';
+import { CARDS, SEED_CARD_IDS, plotIndexOf, isWeed, addBees, addHoney } from './cards.js';
 import { ENEMIES } from './enemies.js';
 
 const randomSeedId = ctx => SEED_CARD_IDS[Math.floor(ctx.rand() * SEED_CARD_IDS.length)];
@@ -11,7 +13,7 @@ const isCompost = id => ((CARDS[id] || {}).keywords || []).includes('compost');
 
 export const KEEPSAKES = {
   nana_locket: {
-    name: "Nana's Locket", icon: 'ks_nana_locket', rarity: 'starter',
+    name: "Nana's Locket", icon: 'ks_nana_locket', rarity: 'starter', pool: 'farmer',
     desc: 'At the start of each combat, a Turnip is already planted in your garden.',
     flavor: 'A tiny portrait inside: Nana, squinting at the sun. Smells faintly of turnip greens.',
     hooks: { combatStart(ctx) { ctx.plant('turnip'); } },
@@ -20,7 +22,7 @@ export const KEEPSAKES = {
     name: "Nana's Trowel", icon: 'ks_trowel', rarity: 'common',
     desc: 'Whenever you plant a seed, it starts with 1 growth.',
     flavor: 'The handle is worn to the shape of a hand that was not yours. It fits anyway.',
-    hooks: { planted(ctx, plant) { const i = plotIndexOf(ctx, plant); ctx.grow(1, i >= 0 ? i : 'random'); } },
+    hooks: { planted(ctx, plant) { if (isWeed(plant)) return; const i = plotIndexOf(ctx, plant); ctx.grow(1, i >= 0 ? i : 'random'); } },
   },
   pocketwatch: {
     name: 'Stopped Pocketwatch', icon: 'ks_pocketwatch', rarity: 'uncommon',
@@ -62,7 +64,7 @@ export const KEEPSAKES = {
     name: "Pell's Beehive", icon: 'ks_beehive', rarity: 'uncommon',
     desc: 'Whenever a plant blooms, add a Honey Drop to your hand.',
     flavor: 'The bees came with it. The bees will not be discussing the arrangement.',
-    hooks: { bloom(ctx) { ctx.addCard('honey_drop', 'hand'); } },
+    hooks: { bloom(ctx, plant) { if (isWeed(plant)) return; ctx.addCard('honey_drop', 'hand'); } },
   },
   old_boot: {
     name: 'Old Boot', icon: 'ks_old_boot', rarity: 'common',
@@ -74,7 +76,7 @@ export const KEEPSAKES = {
     name: 'Pressed Flower', icon: 'ks_pressed_flower', rarity: 'rare',
     desc: 'Whenever a plant blooms, draw 1 card.',
     flavor: 'A frostlily, flat and pale, between two pages of the Almanac that it refuses to give up.',
-    hooks: { bloom(ctx) { ctx.draw(1); } },
+    hooks: { bloom(ctx, plant) { if (isWeed(plant)) return; ctx.draw(1); } },
   },
   music_box: {
     name: 'Music Box', icon: 'ks_music_box', rarity: 'boss',
@@ -146,6 +148,73 @@ export const KEEPSAKES = {
     desc: 'Whenever a critter is mended, gain 3 coin.',
     flavor: "Off Juniper's coat. Sir Pointy's first trophy, on loan.",
     hooks: { enemyMended(ctx) { ctx.coin(3); } },
+  },
+
+  // ================================================================== 2.0: Pell's keepsakes
+  queen_cell: {
+    name: 'Queen Cell', icon: 'ks_queen_cell', rarity: 'starter', pool: 'pell',
+    desc: 'Start each combat with 2 Bees. Whenever a plant blooms, gain 1 Bee and 1 Honey.',
+    flavor: 'A waxy thimble with a future in it. Pell carries it in his shirt pocket, over the heart, where it is warm.',
+    hooks: {
+      combatStart(ctx) { addBees(ctx, 2); },
+      bloom(ctx, plant) { if (isWeed(plant)) return; addBees(ctx, 1); addHoney(ctx, 1); },
+    },
+  },
+  bee_brooch: {
+    name: 'Bee Brooch', icon: 'ks_bee_brooch', rarity: 'common', pool: 'pell',
+    desc: 'Start each combat with 3 Bees.',
+    flavor: "Tin and glass, from Odile's crate. The real bees find it very convincing.",
+    hooks: { combatStart(ctx) { addBees(ctx, 3); } },
+  },
+  veil_hat: {
+    name: 'Veil Hat', icon: 'ks_veil_hat', rarity: 'uncommon', pool: 'pell',
+    desc: 'Whenever you lose Heart to an attack, gain 1 Bee.',
+    flavor: 'Wide brim, long net, a hole where a hornet got through once. The hive remembers the hornet.',
+    hooks: { attacked(ctx, dmg) { if (dmg > 0) addBees(ctx, 1); } },
+  },
+  hive_key: {
+    name: 'Hive Key', icon: 'ks_hive_key', rarity: 'boss', pool: 'pell',
+    desc: 'Whenever a plant blooms, sting 3 times.',
+    flavor: 'Opens nothing. The bees just like it when you hold it up, and they show it by going where you point.',
+    hooks: { async bloom(ctx, plant) { if (isWeed(plant)) return; await ctx.sting(3); } },
+  },
+
+  // ================================================================== 2.0: shared keepsakes
+  garden_gnome: {
+    name: 'Garden Gnome', icon: 'ks_garden_gnome', rarity: 'common',
+    desc: 'At the start of each combat, every planted plot gains Guard.',
+    flavor: 'Bram made it. It has his eyebrows. Tramplers find it unsettling, which is the idea.',
+    hooks: { combatStart(ctx) { if ((ctx.plants || []).some(Boolean)) ctx.guard('all', 1); } },
+  },
+  spade_pin: {
+    name: 'Spade Pin', icon: 'ks_spade_pin', rarity: 'uncommon', unlock: { villager: 'juniper', tier: 2 },
+    desc: 'Start each combat with a 4th plot.',
+    flavor: 'Juniper\'s badge for Junior Gardener, Second Class. She made the rank up. She made the badge, too.',
+    hooks: { combatStart(ctx) { ctx.addPlot(); } },
+  },
+  brass_bell: {
+    name: 'Brass Bell', icon: 'ks_brass_bell', rarity: 'rare', unlock: { villager: 'bram', tier: 3 },
+    desc: 'Whenever a critter plants a Gloamweed, it is uprooted at once and a random critter takes 6 damage.',
+    flavor: 'Bram cast it from a rusted plough. It rings at grey things. Grey things do not care for it.',
+    hooks: { async weedPlanted(ctx) { ctx.uproot('weeds'); await ctx.attackRandom(6); } },
+  },
+  wax_seal: {
+    name: 'Wax Seal', icon: 'ks_wax_seal', rarity: 'uncommon',
+    desc: 'Whenever a card is Composted, a random critter gains 1 Wilt.',
+    flavor: "Pell's, pressed with a bee. Whatever you close with it stays closed and starts, slowly, to rot.",
+    hooks: { cardExhausted(ctx) { ctx.apply('random', 'wilt', 1); } },
+  },
+  brass_smoker: {
+    name: 'Brass Smoker', icon: 'ks_smoker', rarity: 'common',
+    desc: 'Critters start each combat with 1 Dazed.',
+    flavor: 'Two puffs before you open anything. Works on hives. Works on hedgehogs. Works, a little, on Odile.',
+    hooks: { combatStart(ctx) { ctx.apply('all', 'dazed', 1); } },
+  },
+  honey_pot: {
+    name: 'Honey Pot', icon: 'ks_honey_pot', rarity: 'common',
+    desc: 'Start each combat with 2 Bees. They came with the pot.',
+    flavor: 'Stoneware, sticky, and never quite empty. Two bees live in the lid and will not be moved.',
+    hooks: { combatStart(ctx) { addBees(ctx, 2); } },
   },
 };
 

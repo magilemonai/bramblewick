@@ -16,6 +16,8 @@
   button.on { background: var(--on); color: #fff; border-color: var(--on); }
   label { display: flex; gap: 8px; align-items: center; margin: 4px 0; }
   input[type=range] { flex: 1; max-width: 260px; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  pre.out { font: 12px/1.35 ui-monospace, monospace; white-space: pre-wrap; background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 8px; max-height: 40vh; overflow: auto; }
   #meter { font-family: ui-monospace, monospace; font-size: 13px; white-space: pre; background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 8px; overflow-x: auto; }
 </style>
 </head>
@@ -24,27 +26,56 @@
 <p>Tap anything to unlock audio.</p>
 <h2>Music</h2>
 <div class="grid" id="tracks"></div>
+<h2>Intensity (combat tracks)</h2>
+<label>Intensity <input type="range" id="iv" min="0" max="1" step="0.05" value="0"> <span id="ivv">0.00</span></label>
+<div class="row"><button id="sweep">Sweep 0 &rarr; 1 &rarr; 0</button><span id="layers">-</span></div>
+<h2>Stingers</h2>
+<div class="grid" id="stingers"></div>
+<h2>Villager motifs</h2>
+<div class="grid" id="motifs"></div>
 <h2>SFX</h2>
 <div class="grid" id="sfx"></div>
 <h2>Mix</h2>
 <label>Music <input type="range" id="mv" min="0" max="1" step="0.01"></label>
 <label>SFX <input type="range" id="sv" min="0" max="1" step="0.01"></label>
 <label>Pitch <input type="range" id="pitch" min="-12" max="12" step="1" value="0"> <span id="pv">0</span></label>
-<div class="grid"><button id="mute">Mute</button><button id="rep">Repeat last SFX x8</button></div>
+<div class="grid"><button id="mute">Mute</button><button id="rep">Repeat last SFX x8</button><button id="duck">Duck 0.5 for 1s</button></div>
+<h2>Checks</h2>
+<div class="grid"><button id="check">Score checker</button><button id="bal">Lead vs rest (current track)</button></div>
+<pre class="out" id="out">-</pre>
 <h2>Meter</h2>
 <div id="meter">-</div>
 <script type="module">
 import { audio } from '../src/audio.js';
 window.audio = audio;
-const TRACKS = ['title','spring','summer','fall','winter','boss','elite','hearth','market','event','victory','defeat'];
-const SFX = ['click','hover','card_draw','card_play','shuffle','hit','hit_heavy','bark','plant','grow','bloom','heal','coin','buy','enemy_hurt','mend','player_hurt','debuff','buff','end_turn','turn_start','gloom','rain','page_turn','upgrade','victory','defeat','error','step','open'];
+const info = audio._debug();
+const TRACKS = info.tracks, SFX = info.sfx;
 const $ = id => document.getElementById(id);
 let lastSfx = 'click';
 const mk = (parent, label, fn) => { const b = document.createElement('button'); b.textContent = label; b.onclick = () => { audio.unlock(); fn(b); }; parent.appendChild(b); return b; };
 const tb = {};
-for (const t of TRACKS) tb[t] = mk($('tracks'), t, () => { audio.music(t); paint(); });
+for (const t of TRACKS) tb[t] = mk($('tracks'), t, () => { audio.music(t); setI(0); paint(); });
 mk($('tracks'), 'stop', () => { audio.music(null); paint(); });
 for (const s of SFX) mk($('sfx'), s, () => { lastSfx = s; audio.sfx(s, { pitch: +$('pitch').value }); });
+for (const s of info.stingers) mk($('stingers'), s, () => audio.stinger(s));
+for (const m of info.motifs) mk($('motifs'), m, () => audio.motif(m));
+const setI = v => { audio.intensity(v); $('iv').value = v; $('ivv').textContent = (+v).toFixed(2); };
+$('iv').oninput = e => setI(+e.target.value);
+let sweepT = null;
+$('sweep').onclick = () => {
+  audio.unlock();
+  clearInterval(sweepT);
+  let x = 0, dir = 1;
+  sweepT = setInterval(() => { x += dir * 0.05; if (x >= 1) { x = 1; dir = -1; } if (x <= 0 && dir < 0) { x = 0; clearInterval(sweepT); } setI(+x.toFixed(2)); }, 500);
+};
+$('duck').onclick = () => { audio.unlock(); audio.duck(0.5, 1000); };
+$('check').onclick = () => { const r = audio._selfTest(); $('out').textContent = JSON.stringify({ errors: r.errors, strongBeatNCT: r.strongBeatNCT, parallels: r.parallels }, null, 1); };
+$('bal').onclick = async () => {
+  const t = audio.track || 'title';
+  $('out').textContent = 'rendering ' + t + '...';
+  const lead = await audio._measure(t, { role: 'lead' }), rest = await audio._measure(t, { role: '!lead' });
+  $('out').textContent = `${t}: lead ${lead.rms} dB, rest ${rest.rms} dB, lead-rest ${(lead.rms - rest.rms).toFixed(1)} dB`;
+};
 function paint() { for (const t of TRACKS) tb[t].classList.toggle('on', audio.track === t); $('mute').classList.toggle('on', audio.muted); }
 $('mv').value = audio.musicVolume; $('sv').value = audio.sfxVolume;
 $('mv').oninput = e => audio.setMusicVolume(+e.target.value);
@@ -68,7 +99,8 @@ function meter() {
     peakHold = Math.max(pk, peakHold * 0.995); rmsAvg = rmsAvg * 0.95 + rms * 0.05;
     window.levels = { peak: peakHold, rms: rmsAvg, reduction: d.tap.reduction };
     const db = x => (20 * Math.log10(Math.max(x, 1e-6))).toFixed(1);
-    $('meter').textContent = `state ${d.ctx.state}  t=${d.ctx.currentTime.toFixed(1)}\nplaying ${d.playing.join(', ') || '-'}\npeak ${db(peakHold)} dBFS  rms ${db(rmsAvg)} dBFS  comp ${d.tap.reduction.toFixed(1)} dB\nvoices tracked ${d.voices}`;
+    $('layers').textContent = Object.entries(d.layers).map(([k, v]) => `${k} ${v.toFixed(2)}`).join('  ') || 'no layers on this track';
+    $('meter').textContent = `state ${d.ctx.state}  t=${d.ctx.currentTime.toFixed(1)}\nplaying ${d.playing.join(', ') || '-'}\npeak ${db(peakHold)} dBFS  rms ${db(rmsAvg)} dBFS  comp ${d.tap.reduction.toFixed(1)} dB\nvoices tracked ${d.voices}  intensity ${d.intensity.toFixed(2)}  duck ${d.duck}`;
   }
   requestAnimationFrame(meter);
 }

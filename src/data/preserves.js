@@ -49,7 +49,7 @@ export const PRESERVES = {
   pumpkin_butter: {
     name: 'Pumpkin Butter', jar: 'jar_orange', target: 'none',
     desc: 'Harvest all your plants now. Heal 4.',
-    async use(ctx) { for (let i = 2; i >= 0; i--) if (ctx.plants[i]) await ctx.harvest(i); ctx.heal(4); },
+    async use(ctx) { const plots = ctx.plants || []; for (let i = plots.length - 1; i >= 0; i--) if (plots[i] && plots[i].id !== 'gloamweed') await ctx.harvest(i); ctx.heal(4); },
   },
   mossy_moonshine: {
     name: "Mossy's Moonshine", jar: 'jar_amber', target: 'none',

@@ -1,9 +1,13 @@
 // Bramblewick: villager events. Friendship persists between runs; higher friendship unlocks
 // warmer options. Old Mossy's events carry the through-line about the Gloam and Nana Wren;
 // the last piece is in story.js ENDING.
+// 2.0: optional `characters: ['farmer'|'pell']` (and `pool`, which the engine's pickEvent reads) limits an event to those runs. Pell cannot visit
+// himself, so his hives are farmer-only; on Pell's runs the Farmer is a villager (villager: 'farmer').
 
 const f = (ev, id) => ev.getFriendship(id) || 0;
 const has = (ev, ks) => (ev.run.keepsakes || []).includes(ks);
+const isPell = ev => (ev.run.character || 'farmer') === 'pell';
+const seasonOf = ev => ev.run.season || ['spring', 'summer', 'fall', 'winter'][ev.run.seasonIdx || 0];
 
 export const EVENTS = [
   // ------------------------------------------------------------------ Odile
@@ -46,6 +50,44 @@ export const EVENTS = [
         do(ev) { ev.loseCoin(5); ev.heal(12); return "Something with cloves in it. Odile watches the ice and you watch Odile and nobody says anything for a while, which is nice."; } },
     ],
   },
+  {
+    id: 'odile_glass', villager: 'odile', title: 'The Glass Off the Barge', seasons: ['summer', 'fall'],
+    text: "Odile has a brass thing with a dial on the counter and is tapping it. 'Barometer. Off the barge. Tells you tomorrow, if you ask it nice.' She taps it again. 'Buy it, or I'll read it for you once, and you'll have to trust me on what it says.'",
+    choices: [
+      { label: 'Buy the barometer', hint: 'Lose 25 coin. Gain Barometer.', cond: ev => ev.run.coin >= 25,
+        do(ev) { ev.loseCoin(25); ev.addCard('barometer'); return "'Tap it twice. Then believe it.' It is heavier than it looks and right more often than you are."; } },
+      { label: 'Ask for fair weather', hint: 'Heal 10.',
+        do(ev) { ev.heal(10); return "'Sun,' she says, 'sit in it,' and you do, on the dock, for an hour that nobody charges you for."; } },
+      { label: 'Ask for rain', hint: 'Gain 20 coin. Odile +1.',
+        do(ev) { ev.gainCoin(20); ev.friendship('odile', 1); return "'Rain. Get the bunting in.' You get the bunting in, and the crates, and the cat. She pays you for the cat."; } },
+      { label: 'Ask for wind', hint: 'Transform a card.',
+        async do(ev) { await ev.transformCard(); return "'Wind. Everything loose ends up somewhere else.' Something in your deck ends up somewhere else. Better, mostly."; } },
+    ],
+  },
+  {
+    id: 'odile_crow', villager: 'odile', title: 'Robbed in Daylight', seasons: ['spring', 'summer'],
+    text: "A Greycrow has Odile's coin tin and is making off with it in short, insolent hops. Odile is throwing turnips. 'Well? Standing's free, chasing pays.'",
+    choices: [
+      { label: 'Chase it down', hint: 'Fight two Greycrows. Gain 35 coin. Odile +1.',
+        async do(ev) { await ev.fight(['greycrow', 'greycrow']); ev.gainCoin(35); ev.friendship('odile', 1); return "The crow has a friend. The friend has opinions. You come back with the tin, most of the coin, and a feather Odile pretends not to want."; } },
+      { label: 'Cover the loss', hint: 'Lose 20 coin. Odile +2.', cond: ev => ev.run.coin >= 20,
+        do(ev) { ev.loseCoin(20); ev.friendship('odile', 2); return "You put coin on the counter. She looks at it a long time. 'Wren did that once.' She does not give it back, but she does not forget it either."; } },
+      { label: 'Let it keep the shiny thing', hint: 'Heal 8.',
+        do(ev) { ev.heal(8); return "'Fine. FINE.' Odile sits down heavily and pours two cups of something, and you both watch the crow admire itself in the tin lid until it gets bored."; } },
+    ],
+  },
+  {
+    id: 'pell_odile_mead', villager: 'odile', title: 'A Barrel in the Dark', characters: ['pell'], pool: 'pell', seasons: ['summer', 'fall'],
+    text: "Odile rolls a small barrel out from under the counter with her foot. 'Your honey. My barrel. Nine months in the dark.' She knocks on it. It knocks back, sort of. 'Mead. Sell it, share it, or we drink it here and nobody's the wiser.'",
+    choices: [
+      { label: 'Sell the barrel', hint: 'Gain 40 coin.',
+        do(ev) { ev.gainCoin(40); return "She counts it out in the big coins, which she never does. 'Bring more honey. Bring the good honey.'"; } },
+      { label: 'Keep a jug back', hint: 'Gain Mead.',
+        do(ev) { ev.addCard('mead'); return "She fills a stoneware jug and stoppers it with wax. 'Not before a fight. Well. Not before a big fight.'"; } },
+      { label: 'Drink it here', hint: 'Heal 15. Odile +1.',
+        do(ev) { ev.heal(15); ev.friendship('odile', 1); return "Two cups, then three. She tells you about a river in the north that ran gold at sunset, and you tell her the verse about the heron, and neither of you is lying, exactly."; } },
+    ],
+  },
 
   // ------------------------------------------------------------------ Auntie Rue
   {
@@ -84,6 +126,21 @@ export const EVENTS = [
         do(ev) { ev.friendship('rue', 1); ev.addCard('grandmothers_recipe'); return "'She'd bring whatever bloomed that day and we'd cook it. Didn't matter what. Turnip pie, once. Dreadful.' Rue wipes her eyes with the corner of the blanket. 'Here. She'd want you to have the dreadful recipe.'"; } },
       { label: 'Help her bank the fire', hint: 'Rue +1. Gain a random Preserve.',
         do(ev) { ev.friendship('rue', 1); ev.addPreserve('random'); return "Ash over embers, the way she shows you. 'Keeps till morning.' She sends you off with a jar and a look."; } },
+    ],
+  },
+  {
+    id: 'rue_honey_cake', villager: 'rue', title: 'Honey Cake Day',
+    text: "The whole lane smells of it. Rue has four tins cooling on the sill and is guarding them with a wooden spoon. 'One's for you. One's for Mossy, if he comes down, which he won't. Don't touch the third. Nobody knows about the fourth.'",
+    choices: [
+      { label: 'Eat yours now', hint: 'Heal 14.',
+        do(ev) { ev.heal(14); return "Dense, dark, still warm in the middle. You have to sit down. She lets you."; } },
+      { label: 'Ask for the recipe', hint: 'Gain Honey Cake (Pell), or the Honey Pot (Farmer).',
+        do(ev) {
+          if (isPell(ev)) { ev.addCard('honey_cake'); return "'Your honey, my oven, and don't open the door for forty minutes no matter what you hear.' She writes it on the back of a seed packet, in capitals."; }
+          if (!has(ev, 'honey_pot')) { ev.addKeepsake('honey_pot'); return "'You can't bake. Take the pot instead.' It is sticky, it is heavy, and there are two bees asleep in the lid who do not intend to leave."; }
+          ev.addPreserve('clover_honey'); return "'You can't bake. Take a jar and stop asking.' The jar is still warm."; } },
+      { label: 'Help with the fourth tin', hint: 'Rue +1. Upgrade a card.', cond: ev => f(ev, 'rue') >= 1,
+        async do(ev) { ev.friendship('rue', 1); await ev.upgradeCard(); return "The fourth tin is for the heron. She does not say so. She wraps it in a cloth and puts it by the door facing the hill, and she lets you stir the fifth, which nobody knows about either."; } },
     ],
   },
 
@@ -125,6 +182,18 @@ export const EVENTS = [
         async do(ev) { ev.friendship('bram', 1); await ev.upgradeCard(); return "By dusk the shop shines and he has quietly done one of yours as well."; } },
     ],
   },
+  {
+    id: 'bram_scarecrow', villager: 'bram', title: 'A Man of Straw', seasons: ['spring', 'fall'],
+    text: "Bram has a broom handle, a coat, and a turnip with a face drawn on it, and he is not sure about the turnip. 'Wren built the last one. Hollowjack.' He does not look at the hill. 'This one's smaller. This one stays small. Hold the arms.'",
+    choices: [
+      { label: 'Hold the arms', hint: 'Bram +1. Gain an upgraded Scarecrow.',
+        do(ev) { ev.friendship('bram', 1); ev.addCard('scarecrow', true); return "Arms out. Stare at nothing. He nails the hat on with two strokes and steps back. 'Ugly. Good.' It goes in your cart with its head out the side."; } },
+      { label: 'Buy the gnome instead', hint: 'Lose 30 coin. Gain the Garden Gnome.', cond: ev => ev.run.coin >= 30 && !has(ev, 'garden_gnome'),
+        do(ev) { ev.loseCoin(30); ev.addKeepsake('garden_gnome'); return "It has his eyebrows. He denies this. It goes at the end of the first row and the crows, to their credit, do not come near it."; } },
+      { label: 'Wear the hat yourself', hint: 'Gain 5 max Heart.',
+        do(ev) { ev.gainMaxHp(5); return "It is too big, it smells of straw, and something about standing very still in it makes you feel like you could take a hit. 'Suits you,' says Bram, meaning it."; } },
+    ],
+  },
 
   // ------------------------------------------------------------------ Juniper
   {
@@ -134,7 +203,7 @@ export const EVENTS = [
       { label: 'Spar with Sir Pointy', hint: 'Lose 8 Heart. Juniper +2. Gain a Keepsake.',
         do(ev) { ev.damage(8); ev.friendship('juniper', 2); ev.addKeepsake(has(ev, 'lucky_button') ? 'random' : 'lucky_button'); return "She wins. Decisively. Twice. She gives you a button off her coat for being a good sport, and stands very straight."; } },
       { label: 'Catch a bigger one', hint: 'Fight something. Juniper +1. Gain 20 coin.',
-        async do(ev) { await ev.fight(ev.run.season === 'summer' ? ['sunwasp'] : ['burrlet', 'burrlet']); ev.friendship('juniper', 1); ev.gainCoin(20); return "It does not fit in the jar. Juniper is thrilled. She pays you in coins she has clearly been saving for something."; } },
+        async do(ev) { await ev.fight(seasonOf(ev) === 'summer' ? ['cicada'] : ['burrlet', 'burrlet']); ev.friendship('juniper', 1); ev.gainCoin(20); return "It does not fit in the jar. Juniper is thrilled. She pays you in coins she has clearly been saving for something."; } },
       { label: 'Teach her a stance', hint: 'Juniper +1. Gain Scarecrow Stance.',
         do(ev) { ev.friendship('juniper', 1); ev.addCard('scarecrow_stance'); return "Arms out, stare at nothing. She does it better than you. You keep the stance; she keeps the beetle."; } },
       { label: 'Leave', do() { return "'Told you,' she says to the beetle."; } },
@@ -164,10 +233,34 @@ export const EVENTS = [
         do(ev) { ev.heal(10); return "She stands, offended, and drags you to Rue's for cocoa on the grounds that knights also do not freeze."; } },
     ],
   },
-
-  // ------------------------------------------------------------------ Pell
   {
-    id: 'pell_bees', villager: 'pell', title: 'The Quiet Hive', seasons: ['spring', 'summer'],
+    id: 'juniper_weeds', villager: 'juniper', title: 'The Weed War', seasons: ['spring', 'summer'],
+    text: "Juniper is knee-deep in Gloamweed behind Rue's, pulling with both hands and narrating. 'This one's the captain. This one's his horse. GET the horse.' The weeds are grey, thorny, and coming up faster than she can pull them.",
+    choices: [
+      { label: 'Pull weeds with her', hint: 'Lose 4 Heart. Juniper +1. Gain Pull Weeds.',
+        do(ev) { ev.damage(4); ev.friendship('juniper', 1); ev.addCard('pull_weeds'); return "Thorns, mud, and a two-hour campaign against the captain's horse. By the end you have the knack and she has a pile as tall as she is. 'We won,' she says. You did."; } },
+      { label: 'Lend her the hook', hint: 'Gain Weeding Hook.',
+        do(ev) { ev.addCard('weeding_hook'); return "You show her how to get under the root. She shows you how to do it faster. You keep the hook; she keeps the technique, and the captain."; } },
+      { label: 'Pay her a coin a weed', hint: 'Lose 12 coin. Juniper +2. Heal 8.', cond: ev => ev.run.coin >= 12,
+        do(ev) { ev.loseCoin(12); ev.friendship('juniper', 2); ev.heal(8); return "Nobody has ever actually paid her. She stares at the coins, then at you, then pulls weeds with a ferocity that clears the whole patch while you sit on the wall and eat one of Rue's buns."; } },
+    ],
+  },
+  {
+    id: 'pell_juniper_swarm', villager: 'juniper', title: 'The Swarm in the Apple Tree', characters: ['pell'], pool: 'pell', seasons: ['spring', 'summer'],
+    text: "Half your hive is hanging off Juniper's apple tree in a lump the size of a bucket, humming. Juniper is underneath with Sir Pointy, holding the line. 'I didn't do anything. They just LIKED it up there. Can I keep them?'",
+    choices: [
+      { label: 'Climb up and catch them', hint: 'Lose 6 Heart. Gain Catch the Swarm.',
+        do(ev) { ev.damage(6); ev.addCard('catch_the_swarm'); return "A sheet, a box, a ladder that Juniper holds with great seriousness, and four stings you will feel tomorrow. The swarm drops into the box like it planned it. It did."; } },
+      { label: 'Smoke them down', hint: 'Gain the Bee Brooch, or a random Keepsake if you have it.',
+        do(ev) { ev.addKeepsake(has(ev, 'bee_brooch') ? 'random' : 'bee_brooch'); return "Two puffs and they come down slow, in a long golden rope, into the box at the foot of the tree. Juniper finds a tin bee in the grass while you work and pins it on you. 'Medal.'"; } },
+      { label: 'Let her keep them', hint: 'Juniper +2. Gain 15 coin.',
+        do(ev) { ev.friendship('juniper', 2); ev.gainCoin(15); return "You show her how to build a box and where to stand. She names the queen Sir Buzzington. She pays you for the lesson in coins that were clearly meant for something else, and the hive, when you check a week later, is thriving."; } },
+    ],
+  },
+
+  // ------------------------------------------------------------------ Pell (the Farmer visits the hives)
+  {
+    id: 'pell_bees', villager: 'pell', title: 'The Quiet Hive', seasons: ['spring', 'summer'], characters: ['farmer'], pool: 'farmer',
     text: "Pell's hives are usually loud as a church. Today they hum a note you can feel in your teeth. 'Gloam got into the comb,' he says. 'They're frightened. That's worse than angry.'",
     choices: [
       { label: 'Help calm the bees', hint: 'Lose 6 Heart. Pell +1. Choose a rare card.',
@@ -180,7 +273,7 @@ export const EVENTS = [
     ],
   },
   {
-    id: 'pell_song', villager: 'pell', title: 'An Old Song, Badly Remembered', seasons: ['fall'],
+    id: 'pell_song', villager: 'pell', title: 'An Old Song, Badly Remembered', seasons: ['fall'], characters: ['farmer'], pool: 'farmer',
     text: "Pell hums while he works and stops at the same place every time. 'There's a verse about the heron,' he says. 'Wren knew it. I've got the tune and half the words. The other half went somewhere.'",
     choices: [
       { label: 'Hum the missing part', hint: 'Pell +1. Heal 12.',
@@ -192,7 +285,7 @@ export const EVENTS = [
     ],
   },
   {
-    id: 'pell_winter', villager: 'pell', title: 'Bees Asleep', seasons: ['winter'],
+    id: 'pell_winter', villager: 'pell', title: 'Bees Asleep', seasons: ['winter'], characters: ['farmer'], pool: 'farmer',
     text: "The hives are wrapped in burlap and quiet. Pell sits beside them like a man at a bedside. 'They'll wake when the year does,' he says. 'If it does.' He holds out the last warm jar.",
     choices: [
       { label: 'Take the jar', hint: 'Gain Clover Honey.', do(ev) { ev.addPreserve('clover_honey'); return "It is still warm from his hands. 'Don't save it,' he says. 'Things saved too long go grey.'"; } },
@@ -200,6 +293,46 @@ export const EVENTS = [
         do(ev) { ev.friendship('pell', 1); ev.addKeepsake('beehive'); return "An hour of not much. Then he stands, lifts the smallest hive, and puts it in your arms. 'They like you. Don't tell the others.'"; } },
       { label: 'Tell him the year will turn', hint: 'Pell +1. Heal 10.',
         do(ev) { ev.friendship('pell', 1); ev.heal(10); return "'Wren used to say that.' He pours you a cup of something with honey in it. 'She was usually right.'"; } },
+    ],
+  },
+  {
+    id: 'pell_swarm_farm', villager: 'pell', title: 'Visitors in the Turnips', seasons: ['spring', 'summer'], characters: ['farmer'], pool: 'farmer',
+    text: "There is a swarm on your gatepost the size of a hat, and Pell is standing under it with his hands in his pockets, looking pleased. 'They chose you. That's rare. I can hive them, or you can keep the pot they came in, or we can leave them and see what they do.'",
+    choices: [
+      { label: 'Help him hive them', hint: 'Pell +1. Gain Bumblebee.',
+        do(ev) { ev.friendship('pell', 1); ev.addCard('bumblebee'); return "Box, sheet, patience. One fat bumblebee refuses the box on principle and follows you back to the house instead. It seems to think it works for you now."; } },
+      { label: 'Keep the pot', hint: 'Gain the Honey Pot, or Clover Honey if you have it.',
+        do(ev) { if (has(ev, 'honey_pot')) { ev.addPreserve('clover_honey'); return "'Then take a jar for your trouble.' Warm, and gone by supper."; } ev.addKeepsake('honey_pot'); return "Stoneware, sticky, and two bees asleep in the lid who do not intend to leave. Pell says they will follow you into fights. Pell is right."; } },
+      { label: 'Leave them and see', hint: '50%: gain 25 coin. 50%: lose 6 Heart.',
+        do(ev) { if (ev.rand() < 0.5) { ev.gainCoin(25); return "They stay a week, fill the gatepost with comb, and move on. Odile buys the comb by the pound and asks no questions."; } ev.damage(6); return "They stay a week and take exception to the hoe. You learn something about running in a straight line."; } },
+    ],
+  },
+
+  // ------------------------------------------------------------------ The Farmer (Pell's runs only)
+  {
+    id: 'farmer_gate', villager: 'farmer', title: 'The Farm at the Bend', characters: ['pell'], pool: 'pell',
+    text: "The Farmer is leaning on the gate of Wren's place, mud to the knees, hoe over one shoulder, looking at you the way people look at a beekeeper: carefully, from the side. 'Pell. The stag's mended and I've got turnips coming out of my ears. Take something. Take anything. Take the turnips.'",
+    choices: [
+      { label: 'Take the turnips', hint: 'Gain an upgraded Turnip Seeds.',
+        do(ev) { ev.addCard('turnip_seeds', true); return "A pocketful, sorted by size, angrier than most. 'Plant them by the hives. They like the company.'"; } },
+      { label: 'Borrow the hoe', hint: 'Gain an upgraded Hoe Swing.',
+        do(ev) { ev.addCard('hoe_swing', true); return "'Swing from the hips.' You swing from the hips. Something in the hedge yelps and goes home. 'Told you.'"; } },
+      { label: 'Trade honey for jam', hint: 'Gain Strawberry Jam. Farmer +1.',
+        do(ev) { ev.addPreserve('strawberry_jam'); ev.friendship('farmer', 1); return "A jar for a jar, over the gate, the way it has always been done. Neither of you mentions that the Farmer's jar is bigger."; } },
+      { label: 'Wave and walk on', hint: 'Heal 6.',
+        do(ev) { ev.heal(6); return "The Farmer waves back with the hoe, which is dangerous, and goes back to the turnips. It is a good thing to see, the place worked again. You feel it in your feet the whole way up the lane."; } },
+    ],
+  },
+  {
+    id: 'farmer_plots', villager: 'farmer', title: 'Three Plots and a Fourth', characters: ['pell'], pool: 'pell', seasons: ['summer', 'fall'],
+    text: "The Farmer has dug a fourth bed beside Wren's three and is standing over it with the air of someone who has done something slightly illegal. 'Don't tell the Almanac. It gets funny about the number three.' A pause. 'You want it? I can dig another.'",
+    choices: [
+      { label: 'Take the raised bed', hint: 'Gain Raised Bed.',
+        do(ev) { ev.addCard('raised_bed'); return "Four planks, a wheelbarrow of the good dirt, and instructions delivered at length. It comes apart and goes in your cart. The Almanac, when you get back to it, sniffs."; } },
+      { label: 'Plant it together', hint: 'Farmer +1. Gain 6 max Heart.',
+        do(ev) { ev.friendship('farmer', 1); ev.gainMaxHp(6); return "An afternoon on your knees in Wren's dirt with the bees working the clover behind you. You are not sure what you planted. Something good. You feel it for weeks."; } },
+      { label: 'Ask about the Gloam up the hill', hint: 'Farmer +1. Upgrade a card.', cond: ev => f(ev, 'farmer') >= 1,
+        async do(ev) { ev.friendship('farmer', 1); await ev.upgradeCard(); return "'Weeds first. Then whatever planted them.' The Farmer shows you the hook, the angle, the twist. It works on more than weeds."; } },
     ],
   },
 
@@ -240,6 +373,30 @@ export const EVENTS = [
         do(ev) { ev.friendship('mossy', 1); ev.gainMaxHp(6); return "A little wooden wren. Finished, finally. He puts it in your hand and closes your fingers over it. 'Took me a year. Took the year.'"; } },
       { label: 'Say nothing. Sit.', hint: 'Heal 20.',
         do(ev) { ev.heal(20); return "The snow comes down. The Hollow breathes. After a long while he says, 'She'd have liked you,' and that is all, and it is enough."; } },
+    ],
+  },
+  {
+    id: 'mossy_weeds', villager: 'mossy', title: 'Where the Tending Stopped', seasons: ['fall', 'winter'],
+    text: "Gloamweed, waist high, all along the Hollow's lip, grey and thorny and moving a little when the wind is not. Mossy is cutting it back with a hook older than the valley. 'Comes up where nobody's looked for a while,' he says. 'Burn it, dig it, or leave it. Leaving it's what everybody did.'",
+    choices: [
+      { label: 'Burn it back', hint: 'Lose 6 Heart. Mossy +1. Remove a card from your deck.',
+        async do(ev) { ev.damage(6); ev.friendship('mossy', 1); await ev.removeCard(); return "It burns green and stinks and you get a lungful. Under the ash: bare, good, black earth, waiting. 'Put something on the fire you're done with,' he says, and you do."; } },
+      { label: 'Dig it out', hint: 'Gain 25 coin. A Thistle gets into your deck.',
+        do(ev) { ev.gainCoin(25); ev.addCard('thistle'); return "Roots like rope. Under them, of all things, a jar of Wren's coin, buried against a bad year. A thistle comes up with it and will not be put down."; } },
+      { label: 'Ask why it grows here', hint: 'Mossy +1. Gain the Wax Seal, or heal 12 if you have it.',
+        do(ev) { ev.friendship('mossy', 1); if (has(ev, 'wax_seal')) { ev.heal(12); return "'Because nobody comes. Same reason you came.' He gives you the flask, which is worse than the remedy and better for you."; } ev.addKeepsake('wax_seal'); return "'Because nobody comes.' He digs in a pocket and hands you a lump of wax with a bee pressed in it. 'Pell's. Seal a thing and it stays sealed, and the grey works on it slow instead of on you.'"; } },
+    ],
+  },
+  {
+    id: 'pell_mossy_verse', villager: 'mossy', title: 'The Verse About the Heron', characters: ['pell'], pool: 'pell', seasons: ['fall', 'winter'],
+    text: "Mossy hears you before he sees you. 'That's the tune,' he says, not turning round. 'Wren's tune. You've got the words wrong in the middle.' He has never, in anyone's memory, said this many words in a row. 'Sit. I'll tell you the middle. Then you go and sing it at the bird.'",
+    choices: [
+      { label: 'Learn the middle', hint: 'Mossy +1. Gain The Old Song.',
+        do(ev) { ev.friendship('mossy', 1); ev.addCard('the_old_song'); return "He sings it. Badly, flat, with his eyes shut, and it is the most important thing anyone has given you. The bees, which have been quiet, start up again in the box on your back, in the right key."; } },
+      { label: 'Ask about Wren', hint: 'Mossy +1. Upgrade a card.', cond: ev => f(ev, 'mossy') >= 1,
+        async do(ev) { ev.friendship('mossy', 1); await ev.upgradeCard(); return "'She kept bees before you did. Two hives, by the birches. Grey got them first.' He looks at your box. 'Yours are louder. Good.'"; } },
+      { label: 'Sit and hum it with him', hint: 'Heal 16.',
+        do(ev) { ev.heal(16); return "The two of you and the fire and the wrong words in the middle, over and over, until the wrong words are the words and the Hollow has stopped breathing quite so hard."; } },
     ],
   },
 ];

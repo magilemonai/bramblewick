@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <title>Bramblewick combat harness</title>
+  <link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <!-- Combat UI harness (combat UI seat). Builds a Combat + CombatView against a fake game object.
+       Params: ?enemies=gloamslug,burrlet&kind=fight|elite|boss&deck=id,id&tutorial=1&hc=1&rm=1&ts=1.3&speed=2&char=pell
+       Drive from JS: __game, __combat, __view, __demo2() (plays every 2.0 fx once). -->
+  <canvas id="scenery"></canvas>
+  <div id="app"></div>
+  <div id="overlay"></div>
+  <div id="tip" hidden></div>
+  <script type="module">
+    import { spriteURL, hasSprite } from '../src/pixel.js';
+    import { installFrames } from '../src/ui/frames.js';
+    import { installTips, h } from '../src/ui/dom.js';
+    import { Hud } from '../src/ui/hud.js';
+    import { CombatView } from '../src/ui/combatview.js';
+    import { Combat } from '../src/engine/combat.js';
+    import { CARDS, STARTER_DECK } from '../src/data/cards.js';
+    import { renderCard } from '../src/ui/cardview.js';
+
+    const q = new URLSearchParams(location.search);
+    const ART = ['chars_a', 'chars_b', 'chars_c', 'plants', 'icons', 'icons2'];
+    await Promise.all(ART.map(f => import(`../src/art/${f}.js`).catch(e => console.warn('art missing', f, e.message))));
+    installFrames();
+    for (const t of ['soil', 'parchment', 'wood', 'grass']) if (hasSprite('tex_' + t)) document.documentElement.style.setProperty('--tex-' + t, `url(${spriteURL('tex_' + t, 2)})`);
+    installTips();
+
+    const calls = [];
+    const log = (k, ...a) => { calls.push([k, ...a]); };
+    let audio;
+    try { audio = (await import('../src/audio.js')).audio; } catch { audio = null; }
+    const quiet = { unlock() {}, music() {}, sfx: (...a) => log('sfx', ...a), stinger: (...a) => log('stinger', ...a), intensity: (...a) => log('intensity', ...a), setMusicVolume() {}, setSfxVolume() {}, toggleMute() { return true; }, muted: true };
+    let scenery = null;
+    try {
+      const { Scenery } = await import('../src/art/scenery.js');
+      scenery = new Scenery(document.getElementById('scenery'));
+      scenery.start();
+      scenery.setScene({ kind: 'combat', season: 'spring', weather: 'sun', dusk: q.get('kind') === 'boss' });
+      for (const k of ['setDanger', 'setQuality', 'flash']) { const f = scenery[k]?.bind(scenery); scenery[k] = (...a) => { log(k, ...a); f?.(...a); }; }
+    } catch (e) { console.warn('scenery', e); }
+
+    const deck = (q.get('deck') ? q.get('deck').split(',') : [...STARTER_DECK, 'sunflower_seeds', 'rake', 'cup_of_tea', 'gloom']).filter(id => CARDS[id]);
+    let n = 0;
+    const run = {
+      seed: 12345, rngState: 12345, seasonIdx: 0, hp: +(q.get('hp') || 72), maxHp: 72, coin: 99,
+      deck: deck.map(id => ({ id, u: false, uid: 'd' + n++ })), keepsakes: ['nana_locket'], preserves: ['strawberry_jam', null, null],
+      character: q.get('char') || 'farmer', stats: { fights: 0, mended: 0, blooms: 0, cardsPlayed: 0, damage: 0 },
+    };
+    const game = {
+      run, scenery, audio: q.get('audio') ? audio : quiet,
+      meta: { tipsSeen: [], friendship: {} }, saveMeta: () => log('saveMeta'),
+      settings: { textScale: +(q.get('ts') || 1), speed: +(q.get('speed') || 1), reducedMotion: !!q.get('rm'), highContrast: !!q.get('hc'), haptics: true },
+      showPile(title, list) {
+        const row = h('div.card-row'); for (const i of list) row.append(renderCard(i));
+        const m = h('div.modal', h('h2', title), h('div.scroll', row), h('button.btn.green', { onclick: () => m.remove() }, 'Close'));
+        document.getElementById('overlay').append(m);
+      },
+      jarModal(slot, onUse) { onUse?.(); },
+      settingsModal() { log('settingsModal'); },
+      checkpoint: s => log('checkpoint', s),
+    };
+    const kind = q.get('kind') || 'fight';
+    const enemies = q.get('tutorial') ? ['gloamslug'] : (q.get('enemies') || 'gloamslug,burrlet').split(',');
+    const { TUTORIAL } = await import('../src/data/tutorial.js').catch(() => ({}));
+    const tut = q.get('tutorial') && TUTORIAL ? TUTORIAL : null;
+    if (tut) { run.deck = tut.drawOrder.map(id => ({ id, u: false, uid: 'd' + n++ })); }
+    const combat = new Combat(run, enemies, { kind, script: tut ? { drawOrder: tut.drawOrder, weather: tut.weather } : undefined });
+    const hud = new Hud(game, { hpSource: () => combat.player });
+    const view = new CombatView(game, combat, { hud, tutorial: tut });
+    game.view = view;
+    document.getElementById('app').append(view.root);
+    view.sync();
+    Object.assign(window, { __game: game, __combat: combat, __view: view, __calls: calls });
+    combat.start();
+
+    // Play every 2.0 fx once against a faked garden (the engine may not implement them yet).
+    window.__demo2 = async () => {
+      const c = combat, v = view;
+      if (c.plots.length < 4) c.plots.push(null);
+      const mk = (id, growth, extra = {}) => ({ uid: 'p' + Math.random(), id, def: { growTime: 3 }, growth, growTime: 3, u: false, age: 0, ...extra });
+      c.plots[0] = mk('turnip', 1, { guard: 2 });
+      c.plots[1] = mk('sunflower', 2);
+      c.plots[2] = null;
+      c.plots[3] = null;
+      c.player.status.bees = 3;
+      v.sync();
+      await v.fx('guard', { idx: 1, n: 1 }); c.plots[1].guard = 1; v.sync();
+      c.plots[3] = mk('gloamweed', 2, { weed: true }); await v.fx('weed', { idx: 3 });
+      await v.fx('guardBlock', { idx: 0 }); c.plots[0].guard = 1; v.sync();
+      c.weatherLock = true; await v.fx('weatherLock', { weather: c.weather });
+      const e = c.alive()[0];
+      await v.fx('sting', { target: e, amount: 1 });
+      await v.fx('sting', { target: c.alive().at(-1), amount: 1 });
+      await v.fx('steal', { enemy: e, n: 5 });
+      if (c.hand[0]) { c.hand[0].u = true; await v.fx('upgrade', { inst: c.hand[0] }); }
+      if (c.hand[1]) { const inst = c.hand.splice(1, 1)[0]; c.exhaustPile.push(inst); await v.fx('exhaust', { inst }); }
+      await v.fx('hit', { src: c.player, target: e, amount: 18, blocked: 0 });
+      e.phase = 2; await v.fx('bossPhase', { enemy: e, n: 2, text: 'The roots wake!' });
+      const pick = v.choose('Pick a path', [{ label: 'Take the honey', desc: 'Heal 6.', icon: 'icon_honey' }, { label: 'Leave it', desc: 'Nothing happens.' }]);
+      return pick;
+    };
+  </script>
+</body>
+</html>

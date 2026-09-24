@@ -31,3 +31,11 @@ export function makeRng(seed) {
 }
 
 export const newSeed = () => (Math.random() * 2 ** 32) >>> 0;
+
+// Stable 32-bit string hash (FNV-1a with a final avalanche). Used for daily seeds.
+export function hashString(str) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+  h ^= h >>> 16; h = Math.imul(h, 0x85ebca6b); h ^= h >>> 13; h = Math.imul(h, 0xc2b2ae35); h ^= h >>> 16;
+  return h >>> 0;
+}

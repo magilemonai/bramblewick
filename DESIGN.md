@@ -380,7 +380,7 @@ export const TIPS = [ ... ];             // loading/title tips from the Almanac
 
 Shared tree, parallel crew. Own only your files (PLAN-2.0.md table). If another seat's file is broken
 mid-edit, work around it; never fix it. Storage keys: `bramblewick2.run`, `bramblewick2.meta`,
-`bramblewick2.settings` (never write `bramblewick.*`; that's 1.0's).
+`bramblewick2.settings`, `bramblewick2.audio` (never write `bramblewick.*`; that's 1.0's).
 
 ## Characters (`src/data/characters.js`, content)
 ```js
