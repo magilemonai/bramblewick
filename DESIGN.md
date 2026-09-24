@@ -373,3 +373,140 @@ export const TIPS = [ ... ];             // loading/title tips from the Almanac
 - Everything bobs a little. Hits squash and flash. Blooms burst with petals. Mends sparkle and the
   critter hops off-screen.
 - Mobile first (portrait 390x844): stage top ~45%, garden row, hand at bottom. Desktop widens the stage.
+
+---
+
+# 2.0 contract (additive: everything above still holds unless overridden here)
+
+Shared tree, parallel crew. Own only your files (PLAN-2.0.md table). If another seat's file is broken
+mid-edit, work around it; never fix it. Storage keys: `bramblewick2.run`, `bramblewick2.meta`,
+`bramblewick2.settings` (never write `bramblewick.*`; that's 1.0's).
+
+## Characters (`src/data/characters.js`, content)
+```js
+export const CHARACTERS = {
+  farmer: { name: 'The Farmer', sprite: 'farmer', portrait: 'portrait_farmer', hp: 72, color: '#6fae4a',
+    starterDeck: [...], starterKeepsake: 'nana_locket', blurb: '...', unlock: null },
+  pell: { name: 'Pell', sprite: 'pc_pell', portrait: 'vil_pell', hp: 66, color: '#f2b53a',
+    starterDeck: [...], starterKeepsake: '...', blurb: '...', unlock: { boss: 'rootstag' } },
+};
+```
+Cards and keepsakes gain optional `pool: 'farmer' | 'pell'` (absent = shared by both) and optional
+`unlock: { villager: 'rue', tier: 2 } | { boss: 'hollowjack' }` (absent = always available).
+Friendship tiers: 0-1 = 0, 2-3 = 1, 4-6 = 2, 7+ = 3.
+
+**Bees** (Pell's mechanic) is an engine status `bees`: never decays. At the end of the player's turn each
+Bee stings a random critter for 1 damage (ignores Bark, not an attack, no Grit/Soggy). Content builds the
+rest of Pell's identity on top (e.g. blooms feed the hive, cards spend Bees).
+
+## New engine statuses
+`bees` (above) and `guard` (on plots, not units; see Garden).
+
+## Garden 2.0 (engine)
+- `ctx.guard(which = 'all', n = 1)`: add Guard (a scarecrow) to planted plots (`which` as in `grow`).
+  A trample on a guarded plot removes 1 Guard instead of the plant. Plot objects expose `guard`.
+- Gloamweed: critters can plant weeds. `e.plantWeed(n = 1)` plants plant id `gloamweed` into empty plots
+  (right-most first). Gloamweeds grow like plants; their `bloom` hurts the player. They occupy plots.
+- `ctx.uproot(which = 'oldest' | index | 'weeds')`: remove a plant with no bloom. `'weeds'` removes all gloamweeds.
+- Weather lock: `ctx.setWeather(w, { lock: true })` skips the next weather roll (the lock shows on the badge).
+- Plots stay 3. Keepsakes/cards may add a 4th: `ctx.addPlot()` (max 4, this combat only).
+
+## New card ctx APIs (engine implements; also on keepsake/power/preserve ctx)
+```
+await ctx.choose(prompt, options)          options: [{ label, desc?, icon? }] -> chosen index (UI modal; sim picks)
+await ctx.pickCards({ from: 'hand'|'draw'|'discard', n = 1, min = 0, filter?, prompt })  -> [inst]
+ctx.exhaust(inst) / ctx.discard(inst) / ctx.moveCard(inst, 'hand'|'draw'|'drawTop'|'discard')
+ctx.upgrade(inst)                          upgrade for this combat
+ctx.card.data                              per-instance scratch object (this combat)
+ctx.card.perm                              per-deck-card object persisted in the run (e.g. "+2 each time played")
+ctx.cardsPlayedThisTurn                    count BEFORE the current card
+ctx.guard / ctx.uproot / ctx.addPlot / ctx.setWeather(w, {lock})   (above)
+ctx.sting(n)                               n bee stings now (same rule as end-of-turn stings)
+```
+New hooks (keepsake `(ctx, ...args)`, power `(ctx, n, ...args)`): `trampled(plot)`, `weatherChanged(w)`,
+`cardExhausted(inst)`, `stung(enemy)`, `weedPlanted(plot)`.
+
+## New enemy ctx
+`e.plantWeed(n)`, `e.stealCoin(n)` (player loses coin, floats), `e.phase(n, text?)`: sets
+`self.phase` and fires a `bossPhase` fx (title flash + stinger). Movesets may read `e.self.phase`.
+
+## Engine -> UI interface (the combat view implements; the sim stubs)
+```
+ui.sync()
+await ui.fx(type, data)        1.0 types plus: guard {idx,n}, guardBlock {idx}, uproot {idx}, weed {idx},
+                               exhaust {inst}, upgrade {inst}, sting {target, amount}, weatherLock {weather},
+                               steal {enemy, n}, bossPhase {enemy, n, text}, choose/pick handled below
+await ui.choose(prompt, options) -> index
+await ui.pickCards({ prompt, cards, n, min }) -> [inst]
+ui.checkpoint?.(snapshot)      called at the start of every player turn with combat.serialize()
+```
+`combat.serialize()` -> plain JSON (piles, plots, statuses, powers, enemies with hp/status/history/moveKey/phase,
+turn, weather, lock). `Combat.restore(run, snapshot, opts)` rebuilds it; `resume()` continues the player turn.
+
+## Run modifiers (difficulty + daily), engine applies, content defines
+Modifier keys (numbers; engine sums/multiplies): `enemyHpMult, eliteHpMult, bossHpMult, enemyDmgAdd,
+startHpLoss, maxHpAdd, coinMult, restHealMult, shopPriceMult, cardChoicesAdd, startGloom (gloom cards in deck),
+weatherWeights ({weatherId: addedWeight}), eliteExtraMove (bool), startRareCard (bool), startCoin`.
+- `src/data/modes.js`: `export const YEARS = [ { n: 1, name, desc, mods: {...} }, ... up to 10 ]` (cumulative),
+  `export const DAILY_MODS = [ { id, name, desc, mods } ]` (daily picks 2 by seed).
+- Engine exports `applyMods(run)`; `run.mods` holds the merged result. Daily seed = hash of `YYYY-MM-DD`;
+  score = floors*10 + bosses*100 + hp + coin/5 - turns (engine `scoreRun(run)`).
+
+## Meta (`bramblewick2.meta`)
+`{ friendship, runs, wins, bestSeason, yearsUnlocked: { farmer: 0, pell: 0 }, bossesMended: [ids],
+  seen: { cards: [], enemies: [], keepsakes: [] }, tipsSeen: [], daily: { 'YYYY-MM-DD': score } }`.
+Engine exports `isUnlocked(entry, meta)` and uses it for reward pools.
+
+## Tutorial + tips (`src/data/tutorial.js`, content; runs in the combat UI)
+```js
+export const TUTORIAL = { enemies: ['gloamslug'], drawOrder: [...card ids], weather: ['sun','rain','sun'],
+  steps: [ { on: 'start'|'cardPlayed:<id>'|'turn:<n>'|'bloom'|'intent', text, highlight: '.plot' | '.hand .card' | ... } ] };
+export const FIRST_TIPS = { trampleIntent: '...', weedIntent: '...', fog: '...', drought: '...', frost: '...',
+  firstElite: '...', firstBoss: '...', gloomCard: '...', fullPlots: '...', bees: '...' };
+```
+Engine: `new Combat(run, group, { script: { drawOrder, weather } })` forces draw order and weather rolls.
+
+## Sprite additions
+- Animation frames (same size as base, optional, UI falls back): `<id>~1` idle frame 2, `<id>~atk` attack pose,
+  `<id>~hurt` hurt pose. For `farmer`, `pc_pell`, every `en_*` and `boss_*`.
+- chars_c.js: `pc_pell` 32x32 (faces right, beekeeper veil pushed back, smoker, bees), `portrait_farmer` 32x32,
+  new enemies (face left): spring `en_mudpup` 32, `en_rookmother` 40 (elite); summer `en_cicada` 32,
+  `en_hornetknight` 40 (elite); fall `en_strawling` 32, `en_rustboar` 40 (elite); winter `en_frostmoth` 32,
+  `en_snowbear` 40 (elite). Each with ~1/~atk/~hurt.
+- plants.js: `plant_gloamweed_0..3` (grey-violet thorny weed, obviously hostile but still cute-creepy).
+- icons2.js (16x16 unless noted): `icon_hive, icon_smoker, icon_veil, icon_honey_dipper, icon_pollen, icon_wax,
+  icon_queen, icon_flower_crown, icon_lute, icon_jam_jar, icon_trowel, icon_hand_fork, icon_seed_tray,
+  icon_greenhouse, icon_rain_gauge, icon_umbrella, icon_boots, icon_bucket, icon_hay, icon_mortar, icon_letter,
+  icon_ribbon, icon_owl, icon_frog, icon_fox, icon_quill, icon_root, icon_thorn, icon_chestnut, icon_pinecone,
+  icon_icicle, icon_ember, icon_swarm, icon_comb`; keepsakes `ks_queen_cell, ks_smoker, ks_bee_brooch,
+  ks_honey_pot, ks_veil_hat, ks_wax_seal, ks_hive_key, ks_brass_bell, ks_garden_gnome, ks_spade_pin`;
+  UI `ui_star, ui_calendar, ui_book, ui_lock, ui_trophy, ui_speed, ui_text`; status `st_bees, st_guard`;
+  intents `intent_weed, intent_steal`; plot overlay `ov_scarecrow` 12x16; PWA source `app_icon` 32x32.
+- Weak 1.0 sprites to redo (character art seat): `en_sandmantis`, `en_icewisp`, `vil_mossy` brows;
+  (new art seat): `st_grit` (a fist), `ui_stamina` vs `ui_coin` must differ at a glance (stamina = green-gold leaf sun).
+
+## Scenery additions
+```
+setScene({ ..., kind: 'select' | ...1.0 kinds, arena?: 'rootstag'|'scorchmoth'|'hollowjack'|'nightheron' })
+await cover(type = 'page')   // top-layer transition canvas; resolves when the screen is fully covered. types: page|leaves|iris|snow
+await uncover()              // reveals the new screen
+setDanger(0..1)              // low-heart vignette, gentle pulse
+setQuality('high'|'low')     // low = fewer particles, no parallax (reduced motion / battery)
+flash(color = '#fff', ms = 120)
+```
+Boss arenas: unique combat backdrops per boss (Rootstag: a blossoming root-cathedral glade; Scorchmoth:
+sun-bleached hilltop at noon with a huge sun; Hollowjack: moonlit harvest field of lanterns; Nightheron:
+frozen lake under aurora and stars).
+
+## Audio additions
+```
+audio.intensity(0..1)        adaptive layers in combat tracks (0 calm .. 1 low heart / boss phase 2+)
+audio.stinger(name)          'bloom' | 'bossPhase' | 'unlock' | 'daily' | 'tip'
+audio.motif(villagerId)      short phrase for that villager (odile, rue, bram, juniper, pell, mossy)
+audio.duck(amount, ms)
+tracks add: 'select', 'pell' (Pell's run theme, used for Pell's map screens), 'tutorial'
+```
+
+## Balance targets (full-run sim, decent bot, Year 0)
+Reach Summer ~80%, reach Fall ~55%, reach Winter ~35%, win ~20%. Each boss 40-70% for a bot arriving with
+a drafted deck. Harder Years lower these by roughly 3-4 points each.
